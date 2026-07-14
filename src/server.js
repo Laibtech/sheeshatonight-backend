@@ -117,13 +117,14 @@ app.use((req, res) => {
 app.use(errorHandler);
 
 // ============================================
-// START SERVER
+// START SERVER (Only in non-serverless environments)
 // ============================================
-const PORT = process.env.PORT || 5000;
-const HOST = process.env.HOST || 'localhost';
+if (process.env.NODE_ENV !== 'production' || !process.env.VERCEL) {
+  const PORT = process.env.PORT || 5000;
+  const HOST = process.env.HOST || 'localhost';
 
-app.listen(PORT, HOST, () => {
-  console.log(`
+  app.listen(PORT, HOST, () => {
+    console.log(`
 ╔════════════════════════════════════════════════╗
 ║  🍵 SheeshaTonight Backend Server Running      ║
 ╠════════════════════════════════════════════════╣
@@ -131,18 +132,24 @@ app.listen(PORT, HOST, () => {
 ║  Environment: ${process.env.NODE_ENV || 'development'}
 ║  Database: ${process.env.DATABASE_URL ? '✓ Connected' : '✗ Not configured'}
 ╚════════════════════════════════════════════════╝
-  `);
-});
+    `);
+  });
+
+  // ============================================
+  // GRACEFUL SHUTDOWN
+  // ============================================
+  process.on('SIGTERM', () => {
+    console.log('SIGTERM received. Graceful shutdown initiated.');
+    process.exit(0);
+  });
+
+  process.on('SIGINT', () => {
+    console.log('SIGINT received. Graceful shutdown initiated.');
+    process.exit(0);
+  });
+}
 
 // ============================================
-// GRACEFUL SHUTDOWN
+// EXPORT FOR VERCEL
 // ============================================
-process.on('SIGTERM', () => {
-  console.log('SIGTERM received. Graceful shutdown initiated.');
-  process.exit(0);
-});
-
-process.on('SIGINT', () => {
-  console.log('SIGINT received. Graceful shutdown initiated.');
-  process.exit(0);
-});
+export default app;
