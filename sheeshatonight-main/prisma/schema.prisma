@@ -1,0 +1,323 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ma/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id              String     @id @default(cuid())
+  name            String
+  email           String     @unique
+  phone           String?    @unique
+  password        String
+  role            UserRole   @default(CUSTOMER)
+  dob             DateTime?
+  locale          String     @default("en-AE")
+  verified        Boolean    @default(false)
+  kycStatus       KYCStatus  @default(PENDING)
+  kycApprovedAt   DateTime?
+  kycRejectedAt   DateTime?
+  status          UserStatus @default(ACTIVE)
+  createdAt       DateTime   @default(now())
+  updatedAt       DateTime   @updatedAt
+
+  // Relations
+  vendor    Vendor?
+  orders    Order[]
+  addresses Address[]
+
+  @@index([email])
+  @@index([role])
+  @@index([status])
+}
+
+enum UserStatus {
+  ACTIVE
+  INACTIVE
+}
+
+enum UserRole {
+  CUSTOMER
+  VENDOR
+  ADMIN
+}
+
+enum KYCStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+model Vendor {
+  id              String   @id @default(cuid())
+  userId          String   @unique
+  user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  name            String
+  slug            String   @unique
+  description     String?
+  tradeLicense    String? // URL to document
+  tier            VendorTier @default(SOLO)
+  planExpiry      DateTime?
+  isActive        Boolean  @default(true)
+  location        String? // JSON: { lat, lng, city, address }
+  phone           String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  // Relations
+  documents       VendorDocument[]
+  products        Product[]
+  orders          Order[]
+  settlements     Settlement[]
+
+  @@index([userId])
+  @@index([slug])
+  @@index([tier])
+}
+
+enum VendorTier {
+  SOLO        // Basic: 5 products max, standard commission
+  MASTER      // 20 products, priority support
+  ADVANCED    // Unlimited, custom rates, analytics
+}
+
+model VendorDocument {
+  id        String   @id @default(cuid())
+  vendorId  String
+  vendor    Vendor   @relation(fields: [vendorId], references: [id], onDelete: Cascade)
+  type      DocType
+  url       String   // S3 or CDN URL
+  status    DocStatus @default(PENDING)
+  notes     String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([vendorId])
+  @@index([status])
+}
+
+enum DocType {
+  TRADE_LICENSE
+  IDENTITY
+  BUSINESS_REGISTRATION
+  TAX_CERTIFICATE
+}
+
+enum DocStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  EXPIRED
+}
+
+model Product {
+  id          String   @id @default(cuid())
+  vendorId    String
+  vendor      Vendor   @relation(fields: [vendorId], references: [id], onDelete: Cascade)
+  title       String
+  description String?
+  type        ProductType
+  price       Decimal  @db.Decimal(10, 2)
+  currency    String   @default("AED")
+  stock       Int      @default(0)
+  images      String[] // JSON array URLs
+  sku         String?  @unique
+  isActive    Boolean  @default(true)
+  isFeatured  Boolean  @default(false)
+  approvedAt  DateTime?
+  rejectedAt  DateTime?
+  deletedAt   DateTime?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  // Relations
+  orderItems  OrderItem[]
+
+  @@index([vendorId])
+  @@index([type])
+  @@index([isActive])
+  @@index([isFeatured])
+}
+
+enum ProductType {
+  SHEESHA_PIPE       // High-end tobacco pipes
+  TOBACCO_BLEND      // Premium tobacco
+  ACCESSORY          // Charcoal, hoses, etc.
+  RENTAL_PACKAGE     // Full package rental
+  EQUIPMENT          // Setup gear
+}
+
+model Order {
+  id              String   @id @default(cuid())
+  orderNumber     String   @unique // e.g., ORD-2026-001
+  userId          String
+  user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  vendorId        String
+  vendor          Vendor   @relation(fields: [vendorId], references: [id])
+  status          OrderStatus @default(PREPARING)
+  totalAmount     Decimal  @db.Decimal(10, 2)
+  currency        String   @default("AED")
+  rentalStartDate DateTime?
+  rentalEndDate   DateTime?
+  deliveryDate    DateTime?
+  pickupDate      DateTime?
+  notes           String?
+  acceptedAt      DateTime?
+  cancelledAt     DateTime?
+  shippedAt       DateTime?
+  deliveredAt     DateTime?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  // Relations
+  items           OrderItem[]
+  tracking        OrderTracking?
+  invoice         Invoice?
+
+  @@index([userId])
+  @@index([vendorId])
+  @@index([status])
+  @@index([createdAt])
+}
+
+enum OrderStatus {
+  PREPARING          // Vendor preparing items
+  READY_FOR_PICKUP   // Ready for customer pickup
+  OUT_FOR_DELIVERY   // Delivery in progress
+  DELIVERED          // Delivered to customer
+  ACTIVE_RENTAL      // Rental period active
+  COMPLETED          // Rental/order finished
+  CANCELLED          // Order cancelled
+}
+
+model OrderItem {
+  id        String   @id @default(cuid())
+  orderId   String
+  order     Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  productId String
+  product   Product  @relation(fields: [productId], references: [id])
+  quantity  Int      @default(1)
+  price     Decimal  @db.Decimal(10, 2)
+  createdAt DateTime @default(now())
+
+  @@index([orderId])
+  @@index([productId])
+}
+
+model OrderTracking {
+  id              String   @id @default(cuid())
+  orderId         String   @unique
+  order           Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  status          OrderStatus
+  locationLat     Decimal? @db.Decimal(10, 8)
+  locationLng     Decimal? @db.Decimal(10, 8)
+  estimatedDelivery DateTime?
+  lastUpdated     DateTime @updatedAt
+  events          String[] // JSON array of tracking events
+
+  @@index([orderId])
+}
+
+model Invoice {
+  id              String   @id @default(cuid())
+  orderId         String   @unique
+  order           Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  invoiceNumber   String   @unique
+  subtotal        Decimal  @db.Decimal(10, 2)
+  tax             Decimal  @db.Decimal(10, 2)
+  total           Decimal  @db.Decimal(10, 2)
+  issuedAt        DateTime @default(now())
+  pdfUrl          String?
+
+  @@index([orderId])
+}
+
+model Settlement {
+  id          String   @id @default(cuid())
+  vendorId    String
+  vendor      Vendor   @relation(fields: [vendorId], references: [id], onDelete: Cascade)
+  period      String   // e.g., "2026-05"
+  amount      Decimal  @db.Decimal(10, 2)
+  commission  Decimal  @db.Decimal(10, 2)
+  status      SettlementStatus @default(PENDING)
+  paidAt      DateTime?
+  createdAt   DateTime @default(now())
+
+  @@index([vendorId])
+  @@index([status])
+}
+
+enum SettlementStatus {
+  PENDING
+  PROCESSED
+  PAID
+  FAILED
+}
+
+model Address {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  label     String   // "Home", "Office", etc.
+  street    String
+  building  String?
+  city      String
+  country   String
+  zipcode   String?
+  isDefault Boolean  @default(false)
+  createdAt DateTime @default(now())
+
+  @@index([userId])
+}
+
+model Cart {
+  id        String   @id @default(cuid())
+  userId    String
+  productId String
+  quantity  Int      @default(1)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([userId, productId])
+  @@index([userId])
+  @@index([productId])
+}
+
+model Notification {
+  id        String   @id @default(cuid())
+  userId    String
+  type      String
+  title     String
+  message   String
+  read      Boolean  @default(false)
+  data      String?  // JSON metadata
+  createdAt DateTime @default(now())
+
+  @@index([userId])
+  @@index([read])
+  @@index([createdAt])
+}
+
+model AuditLog {
+  id           String   @id @default(cuid())
+  userId       String
+  action       String
+  resourceType String
+  resourceId   String?
+  beforeState  String?  // JSON
+  afterState   String?  // JSON
+  ipAddress    String?
+  userAgent    String?
+  createdAt    DateTime @default(now())
+
+  @@index([userId])
+  @@index([resourceType])
+  @@index([action])
+  @@index([createdAt])
+}

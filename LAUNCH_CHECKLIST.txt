@@ -1,0 +1,378 @@
+═══════════════════════════════════════════════════════════════════════════════
+                    SHEESHATONIGHT - LAUNCH CHECKLIST
+═══════════════════════════════════════════════════════════════════════════════
+
+Date: July 14, 2026
+Status: READY FOR DEPLOYMENT
+Progress: 75% Complete
+
+═══════════════════════════════════════════════════════════════════════════════
+                         PHASE 0: GIT PUSH (3 MINUTES)
+═══════════════════════════════════════════════════════════════════════════════
+
+Frontend Repository:
+  ✅ Repository created on GitHub
+  ✅ Code pushed to main branch
+  ✅ URL: https://github.com/NOTREALTODAy/sheeshatonight-main
+
+Backend Repository:
+  ⚠️ Create repository: https://github.com/new
+     - Name: sheeshatonight-backend
+     - Private: YES
+     - README: NO
+     - .gitignore: NO
+     - License: NONE
+  
+  ⚠️ Push code:
+     cd c:\Users\Abc\Downloads\sheeshatonight-main\backend
+     git push -u origin main
+  
+  ⚠️ Verify: https://github.com/NOTREALTODAy/sheeshatonight-backend
+
+═══════════════════════════════════════════════════════════════════════════════
+                    PHASE 1: DATABASE SETUP (15 MINUTES)
+═══════════════════════════════════════════════════════════════════════════════
+
+Choose Provider:
+  ☐ Option A: Supabase (https://supabase.com)
+  ☐ Option B: Neon (https://neon.tech)
+
+Steps:
+  ☐ Sign up for account
+  ☐ Create new project
+  ☐ Name: sheeshatonight-production
+  ☐ Choose region (closest to users)
+  ☐ Wait for setup (2-3 minutes)
+  ☐ Get connection string (URI format)
+  ☐ Save to secure location
+
+Generate Secrets:
+  ☐ Run: node -e "console.log(require('crypto').randomBytes(64).toString('hex'))"
+  ☐ Save JWT_SECRET
+  
+Credentials to Save:
+  ☐ DATABASE_URL: _________________________________________________
+  ☐ JWT_SECRET: ___________________________________________________
+
+═══════════════════════════════════════════════════════════════════════════════
+                  PHASE 2: BACKEND DEPLOYMENT (30 MINUTES)
+═══════════════════════════════════════════════════════════════════════════════
+
+Login to Hostinger:
+  ☐ Go to: https://hpanel.hostinger.com
+  ☐ Navigate to: Websites → Add website → Deploy Web App
+
+Import Repository:
+  ☐ Authorize GitHub
+  ☐ Select: NOTREALTODAy/sheeshatonight-backend
+  ☐ Branch: main
+  ☐ Framework: Other
+  ☐ Start command: node src/server.js
+  ☐ Node version: 18+
+
+Environment Variables:
+  ☐ DATABASE_URL: (from Phase 1)
+  ☐ JWT_SECRET: (from Phase 1)
+  ☐ PORT: 5000
+  ☐ NODE_ENV: production
+  ☐ FRONTEND_URL: (will add after Phase 3)
+
+Deploy:
+  ☐ Click "Deploy"
+  ☐ Wait for build (3-5 minutes)
+  ☐ Check logs for errors
+  ☐ Note backend URL: _______________________________________________
+
+Database Migrations:
+  ☐ In Hostinger shell OR from local:
+     npx prisma migrate deploy
+     npx prisma generate
+     node src/utils/seed.js
+
+Test Backend:
+  ☐ Visit: [backend-url]/health
+  ☐ Expected: {"status": "ok"}
+
+═══════════════════════════════════════════════════════════════════════════════
+                 PHASE 3: FRONTEND DEPLOYMENT (30 MINUTES)
+═══════════════════════════════════════════════════════════════════════════════
+
+Create New App:
+  ☐ hPanel → Websites → Add website → Deploy Web App
+
+Import Repository:
+  ☐ Select: NOTREALTODAy/sheeshatonight-main
+  ☐ Branch: main
+  ☐ Framework: Next.js (auto-detect)
+  ☐ Build command: npm run build
+  ☐ Start command: npm start
+
+Environment Variables:
+  ☐ NEXT_PUBLIC_API_URL: (backend URL from Phase 2)
+  ☐ JWT_SECRET: (same as backend)
+  ☐ NODE_ENV: production
+
+Deploy:
+  ☐ Click "Deploy"
+  ☐ Wait for build (5-10 minutes)
+  ☐ Check logs for errors
+  ☐ Note frontend URL: ______________________________________________
+
+Update Backend:
+  ☐ Go back to backend deployment
+  ☐ Add/update FRONTEND_URL: (frontend URL from above)
+  ☐ Redeploy backend
+
+Test Frontend:
+  ☐ Visit frontend URL
+  ☐ Homepage should load
+  ☐ Check browser console for errors
+
+═══════════════════════════════════════════════════════════════════════════════
+                   PHASE 4: DOMAIN SETUP (30 MINUTES)
+═══════════════════════════════════════════════════════════════════════════════
+
+Domain: _______________________________________________________________
+
+Frontend Domain:
+  ☐ hPanel → Frontend app → Connect Domain
+  ☐ Enter: yourdomain.com
+  ☐ Follow DNS instructions
+  ☐ Wait for SSL (10-60 minutes)
+
+Backend Subdomain:
+  ☐ hPanel → Backend app → Connect Domain
+  ☐ Enter: api.yourdomain.com
+  ☐ Update DNS
+  ☐ Wait for SSL
+
+DNS Records (if external domain):
+  ☐ A record: @ → [Hostinger IP]
+  ☐ A record: api → [Hostinger IP]
+  ☐ CNAME: www → yourdomain.com
+
+Update Environment Variables:
+  ☐ Backend FRONTEND_URL: https://yourdomain.com
+  ☐ Frontend NEXT_PUBLIC_API_URL: https://api.yourdomain.com
+  ☐ Redeploy both apps
+
+Verify SSL:
+  ☐ https://yourdomain.com (green padlock)
+  ☐ https://api.yourdomain.com (green padlock)
+
+═══════════════════════════════════════════════════════════════════════════════
+               PHASE 5: PRODUCTION HARDENING (30 MINUTES)
+═══════════════════════════════════════════════════════════════════════════════
+
+Update CORS (backend/src/server.js):
+  ☐ Change from: app.use(cors());
+  ☐ Change to: app.use(cors({
+                 origin: 'https://yourdomain.com',
+                 credentials: true
+               }));
+  ☐ Commit and push
+
+Demo Credentials:
+  ☐ Option A: Change passwords in seed.js
+  ☐ Option B: Disable seeding in production
+  ☐ Document new credentials securely
+
+Security Checklist:
+  ☐ .env not in Git (check both repos)
+  ☐ CORS restricted to production domain
+  ☐ JWT_SECRET is strong (64+ chars)
+  ☐ Database password is strong
+  ☐ Rate limiting enabled
+  ☐ Helmet middleware active
+  ☐ Demo accounts secured
+
+Code Review:
+  ☐ No hardcoded secrets
+  ☐ No console.logs with sensitive data
+  ☐ Error messages don't leak info
+  ☐ Input validation on all endpoints
+
+═══════════════════════════════════════════════════════════════════════════════
+                 PHASE 6: FINAL VERIFICATION (15 MINUTES)
+═══════════════════════════════════════════════════════════════════════════════
+
+Backend Health:
+  ☐ Visit: https://api.yourdomain.com/health
+  ☐ Expected: {"status": "ok"}
+  ☐ Response time: < 500ms
+
+Frontend:
+  ☐ Homepage loads: https://yourdomain.com
+  ☐ No console errors
+  ☐ Images load correctly
+  ☐ Navigation works
+  ☐ SSL padlock visible
+
+Authentication:
+  ☐ Admin login works
+  ☐ Vendor login works
+  ☐ Customer login works
+  ☐ JWT tokens generated
+  ☐ Protected routes work
+
+Admin Dashboard:
+  ☐ Dashboard loads: https://yourdomain.com/admin/dashboard
+  ☐ User list loads
+  ☐ Vendor list loads
+  ☐ Statistics display
+  ☐ Notifications work
+
+Vendor Dashboard:
+  ☐ Dashboard loads: https://yourdomain.com/vendor/dashboard
+  ☐ Product list loads
+  ☐ Can create product
+  ☐ Can edit product
+  ☐ Orders display
+
+Customer Dashboard:
+  ☐ Dashboard loads: https://yourdomain.com/dashboard
+  ☐ Profile loads
+  ☐ Order history displays
+
+Core Functionality:
+  ☐ Product listing page works
+  ☐ Search functionality works
+  ☐ Add to cart works
+  ☐ Cart displays correctly
+  ☐ Checkout flow works
+  ☐ Order creation successful
+
+API Integration:
+  ☐ Frontend → Backend communication working
+  ☐ All API calls successful
+  ☐ No CORS errors
+  ☐ Authentication headers sent
+
+Database:
+  ☐ Queries executing
+  ☐ Data persisting
+  ☐ Relationships working
+  ☐ Migrations applied
+
+═══════════════════════════════════════════════════════════════════════════════
+                         POST-LAUNCH CHECKLIST
+═══════════════════════════════════════════════════════════════════════════════
+
+Day 1:
+  ☐ Monitor error logs (Hostinger dashboard)
+  ☐ Check backend health every hour
+  ☐ Test all user flows
+  ☐ Verify emails/notifications (if enabled)
+  ☐ Check database performance
+
+Week 1:
+  ☐ Daily log monitoring
+  ☐ User feedback collection
+  ☐ Performance monitoring
+  ☐ Security audit
+  ☐ Backup verification
+
+Month 1:
+  ☐ Set up UptimeRobot (uptime monitoring)
+  ☐ Set up Sentry (error tracking)
+  ☐ Implement analytics
+  ☐ Review and optimize queries
+  ☐ Plan feature enhancements
+
+═══════════════════════════════════════════════════════════════════════════════
+                         ROLLBACK PROCEDURE
+═══════════════════════════════════════════════════════════════════════════════
+
+If Something Goes Wrong:
+
+Backend Issues:
+  ☐ Check Hostinger deployment logs
+  ☐ Verify environment variables
+  ☐ Check database connection
+  ☐ Rollback to previous commit:
+     git revert HEAD
+     git push
+
+Frontend Issues:
+  ☐ Check build logs
+  ☐ Verify environment variables
+  ☐ Check API connection
+  ☐ Rollback if needed:
+     git revert HEAD
+     git push
+
+Database Issues:
+  ☐ Check Supabase/Neon dashboard
+  ☐ Verify connection string
+  ☐ Check migration status
+  ☐ Restore from backup if needed
+
+Emergency Contacts:
+  Hostinger Support: [Live chat in hPanel]
+  Supabase Support: [support@supabase.io]
+  Neon Support: [support page on neon.tech]
+
+═══════════════════════════════════════════════════════════════════════════════
+                            SUCCESS METRICS
+═══════════════════════════════════════════════════════════════════════════════
+
+You've successfully launched when:
+
+  ✅ Both domains load with SSL
+  ✅ All 3 user roles can login
+  ✅ Products display from database
+  ✅ Cart and checkout work
+  ✅ Orders are created successfully
+  ✅ Admin can manage users/vendors
+  ✅ Vendor can manage products
+  ✅ No critical console errors
+  ✅ Backend health check passes
+  ✅ All API calls succeed
+
+═══════════════════════════════════════════════════════════════════════════════
+                           CELEBRATION TIME! 🎉
+═══════════════════════════════════════════════════════════════════════════════
+
+When all checkboxes are ✅:
+  
+  🎊 Your application is LIVE!
+  🚀 Users can start using it!
+  📈 Time to market and grow!
+  
+  Well done! 🌟
+
+═══════════════════════════════════════════════════════════════════════════════
+
+Next Steps After Launch:
+  1. Monitor daily for first week
+  2. Gather user feedback
+  3. Plan feature roadmap
+  4. Integrate payment gateway
+  5. Set up email notifications
+  6. Implement analytics
+  7. Scale infrastructure
+
+═══════════════════════════════════════════════════════════════════════════════
+                         IMPORTANT CONTACTS & URLS
+═══════════════════════════════════════════════════════════════════════════════
+
+GitHub (Frontend):    https://github.com/NOTREALTODAy/sheeshatonight-main
+GitHub (Backend):     https://github.com/NOTREALTODAy/sheeshatonight-backend
+Hostinger hPanel:     https://hpanel.hostinger.com
+Database Provider:    (Supabase or Neon URL)
+
+Local Frontend:       http://localhost:3002
+Local Backend:        http://localhost:5000
+
+Production Frontend:  https://yourdomain.com
+Production Backend:   https://api.yourdomain.com
+
+═══════════════════════════════════════════════════════════════════════════════
+
+Print this checklist and check off items as you complete them!
+
+Last Updated: July 14, 2026
+Document Version: 1.0
+Status: Ready for Launch
+
+═══════════════════════════════════════════════════════════════════════════════
