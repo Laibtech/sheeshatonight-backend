@@ -1,14 +1,24 @@
-'use client';
-
 import Link from 'next/link';
-import { useState } from 'react';
-import { ChevronDown, ChevronUp } from 'lucide-react';
+import Header from '@/components/Header';
+import Footer from '@/components/Footer';
+import FaqAccordion, { FaqItem } from '@/components/FaqAccordion';
+import { prisma } from '@/lib/prisma';
+import { HelpCircle, Sparkles } from 'lucide-react';
 
-export default function FAQsPage() {
-  const [showAccountMenu, setShowAccountMenu] = useState(false);
-  const [openFaq, setOpenFaq] = useState<number | null>(null);
+export const revalidate = 60;
 
-  const faqs = [
+export default async function FAQsPage() {
+  const dbPage = await prisma.cmsPage.findFirst({
+    where: {
+      slug: { in: ['faqs', 'faq'] },
+      isActive: true,
+    },
+  }).catch(() => null);
+
+  const dbPageContent = dbPage?.content || null;
+  const dbTitle = dbPage?.title || null;
+
+  const faqs: FaqItem[] = [
     {
       question: 'What areas do you serve in UAE?',
       answer: 'We deliver premium shisha services across all Emirates including Dubai, Abu Dhabi, Sharjah, Ajman, Ras Al Khaimah, Fujairah, and Umm Al Quwain. Free delivery is included in all our packages.'
@@ -67,168 +77,71 @@ export default function FAQsPage() {
     },
     {
       question: 'Do you provide hookah equipment for purchase?',
-      answer: 'Yes! Visit our "Make Your Sheesha" page where you can customize and purchase your own shisha setup with your choice of base, hose, bowl, and flavors for home use.'
+      answer: 'Yes! Visit our Shop page where you can purchase your own shisha setup with your choice of base, hose, bowl, and flavors for home use.'
     }
   ];
 
-  const toggleFaq = (index: number) => {
-    setOpenFaq(openFaq === index ? null : index);
-  };
-
   return (
-    <div className="min-h-screen bg-[#F8FAFC]">
-      {/* Header */}
-      <header className="fixed top-0 left-0 right-0 z-50 bg-white shadow-md border-b border-slate-200">
-        <div className="container mx-auto px-6 py-4">
-          <div className="flex items-center justify-between">
-            <Link href="/" className="flex items-center space-x-3">
-              <img src="/logo.png" alt="SheeshaTonight" className="h-12 w-auto object-contain" />
-            </Link>
+    <div className="min-h-screen bg-[#FDFBF7] flex flex-col justify-between">
+      <Header />
 
-            <nav className="hidden md:flex items-center space-x-8">
-              <Link href="/" className="text-slate-700 hover:text-[#D4AF37] transition font-medium">Home</Link>
-              <Link href="/about" className="text-slate-700 hover:text-[#D4AF37] transition font-medium">About Us</Link>
-              <Link href="/rentals" className="text-slate-700 hover:text-[#D4AF37] transition font-medium">Rentals</Link>
-              <Link href="/faqs" className="text-[#D4AF37] font-semibold">FAQs</Link>
-              <Link href="/contact" className="text-slate-700 hover:text-[#D4AF37] transition font-medium">Contact</Link>
-            </nav>
-
-            <div className="relative">
-              <button 
-                onClick={() => setShowAccountMenu(!showAccountMenu)}
-                className="px-4 py-2 bg-[#D4AF37] text-white rounded-lg hover:bg-[#B8902A] transition font-medium"
-              >
-                Account
-              </button>
-
-              {showAccountMenu && (
-                <div className="absolute right-0 mt-2 w-48 bg-white rounded-lg shadow-2xl py-2 z-50">
-                  <Link href="/auth/signup" className="block px-4 py-2 hover:bg-gray-50">Sign Up</Link>
-                  <Link href="/auth/login" className="block px-4 py-2 hover:bg-gray-50">Login</Link>
-                </div>
-              )}
+      <main className="flex-1">
+        {/* Hero Section */}
+        <section className="bg-gradient-to-b from-purple-50/50 to-transparent py-14 border-b border-slate-100">
+          <div className="max-w-[1000px] mx-auto px-4 sm:px-6 lg:px-8 text-center">
+            <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-purple-100/80 text-[#74189B] text-xs font-bold uppercase tracking-wider mb-4">
+              <HelpCircle size={14} /> Help & Assistance
             </div>
-          </div>
-        </div>
-      </header>
-
-      {/* Hero Section */}
-      <section className="pt-32 pb-16 bg-gradient-to-br from-[#D4AF37]/10 to-[#B8902A]/5">
-        <div className="container mx-auto px-6 text-center">
-          <h1 className="text-5xl md:text-6xl font-bold text-slate-900 mb-6">
-            Frequently Asked <span className="text-[#D4AF37]">Questions</span>
-          </h1>
-          <p className="text-xl text-slate-600 max-w-3xl mx-auto">
-            Find answers to common questions about our premium shisha rental services
-          </p>
-        </div>
-      </section>
-
-      {/* FAQs Section */}
-      <section className="py-16">
-        <div className="container mx-auto px-6">
-          <div className="max-w-4xl mx-auto">
-            <div className="space-y-4">
-              {faqs.map((faq, index) => (
-                <div 
-                  key={index}
-                  className="bg-white rounded-xl shadow-md overflow-hidden transition hover:shadow-lg"
-                >
-                  <button
-                    onClick={() => toggleFaq(index)}
-                    className="w-full flex items-center justify-between p-6 text-left"
-                  >
-                    <h3 className="text-lg font-bold text-slate-900 pr-4">
-                      {faq.question}
-                    </h3>
-                    {openFaq === index ? (
-                      <ChevronUp className="w-6 h-6 text-[#D4AF37] flex-shrink-0" />
-                    ) : (
-                      <ChevronDown className="w-6 h-6 text-[#D4AF37] flex-shrink-0" />
-                    )}
-                  </button>
-
-                  {openFaq === index && (
-                    <div className="px-6 pb-6">
-                      <p className="text-slate-600 leading-relaxed">
-                        {faq.answer}
-                      </p>
-                    </div>
-                  )}
-                </div>
-              ))}
-            </div>
-          </div>
-        </div>
-      </section>
-
-      {/* Still Have Questions */}
-      <section className="py-16 bg-gradient-to-br from-[#D4AF37] to-[#B8902A]">
-        <div className="container mx-auto px-6 text-center">
-          <h2 className="text-3xl font-bold text-white mb-4">Still Have Questions?</h2>
-          <p className="text-xl text-white/90 mb-8">Our team is here to help you 24/7</p>
-          <div className="flex flex-wrap justify-center gap-4">
-            <Link 
-              href="/contact"
-              className="px-8 py-4 bg-white text-[#D4AF37] rounded-lg font-semibold hover:bg-slate-100 transition"
-            >
-              Contact Us
-            </Link>
-            <a 
-              href="tel:+971501231111"
-              className="px-8 py-4 bg-transparent border-2 border-white text-white rounded-lg font-semibold hover:bg-white hover:text-[#D4AF37] transition"
-            >
-              Call: +971 50 123 1111
-            </a>
-          </div>
-        </div>
-      </section>
-
-      {/* Footer */}
-      <footer className="bg-slate-900 text-white py-12">
-        <div className="container mx-auto px-6">
-          <div className="grid md:grid-cols-4 gap-8">
-            <div>
-              <h3 className="text-lg font-bold mb-4">ABOUT US</h3>
-              <p className="text-sm text-slate-400">
-                Premium shisha rental services across UAE for all your special events.
-              </p>
-            </div>
-
-            <div>
-              <h3 className="text-lg font-bold mb-4">QUICK LINKS</h3>
-              <ul className="space-y-2 text-sm">
-                <li><Link href="/about" className="text-slate-400 hover:text-[#D4AF37]">About Us</Link></li>
-                <li><Link href="/rentals" className="text-slate-400 hover:text-[#D4AF37]">Rentals</Link></li>
-                <li><Link href="/blogs" className="text-slate-400 hover:text-[#D4AF37]">Blogs</Link></li>
-                <li><Link href="/contact" className="text-slate-400 hover:text-[#D4AF37]">Contact</Link></li>
-              </ul>
-            </div>
-
-            <div>
-              <h3 className="text-lg font-bold mb-4">SUPPORT</h3>
-              <ul className="space-y-2 text-sm">
-                <li><Link href="/faqs" className="text-slate-400 hover:text-[#D4AF37]">FAQs</Link></li>
-                <li><Link href="/privacy" className="text-slate-400 hover:text-[#D4AF37]">Privacy Policy</Link></li>
-                <li><Link href="/help" className="text-slate-400 hover:text-[#D4AF37]">Help Center</Link></li>
-              </ul>
-            </div>
-
-            <div>
-              <h3 className="text-lg font-bold mb-4">CONTACT</h3>
-              <p className="text-sm text-slate-400 mb-2">Email: support@sheeshatonight.com</p>
-              <p className="text-sm text-slate-400 mb-2">Phone: +971 50 123 1111</p>
-              <p className="text-sm text-slate-400">Dubai, UAE</p>
-            </div>
-          </div>
-
-          <div className="border-t border-slate-800 mt-8 pt-8 text-center">
-            <p className="text-sm text-slate-400">
-              © 2026 <span className="text-[#D4AF37]">SheeshaTonight</span> All rights reserved.
+            <h1 className="text-4xl sm:text-5xl font-black text-slate-900 mb-4 tracking-tight">
+              Frequently Asked <span className="text-[#74189B]">Questions</span>
+            </h1>
+            <p className="text-slate-600 max-w-xl mx-auto text-base sm:text-lg">
+              Find answers to common questions about our premium shisha rentals, catering, and marketplace delivery across the UAE.
             </p>
           </div>
-        </div>
-      </footer>
+        </section>
+
+        {/* FAQs Section */}
+        <section className="py-12 max-w-[1000px] mx-auto px-4 sm:px-6 lg:px-8">
+          {dbPageContent && (
+            <div className="bg-white rounded-3xl p-8 border border-slate-100 shadow-sm mb-8">
+              <div className="flex items-center gap-2 text-[#F1A51D] text-xs font-bold uppercase tracking-widest mb-2">
+                <Sparkles size={14} /> Official FAQ Guidelines
+              </div>
+              <h2 className="text-2xl font-bold text-slate-900 mb-4">{dbTitle || 'Frequently Asked Questions'}</h2>
+              <div className="text-slate-600 leading-relaxed whitespace-pre-wrap text-[15px]">{dbPageContent}</div>
+            </div>
+          )}
+
+          <FaqAccordion items={faqs} />
+        </section>
+
+        {/* Still Have Questions CTA */}
+        <section className="max-w-[1000px] mx-auto px-4 sm:px-6 lg:px-8 pb-16">
+          <div className="bg-gradient-to-br from-[#74189B] to-[#571275] rounded-3xl p-8 sm:p-12 text-center text-white shadow-xl">
+            <h2 className="text-2xl sm:text-3xl font-bold mb-3">Still Have Questions?</h2>
+            <p className="text-white/80 max-w-lg mx-auto mb-8 text-sm sm:text-base">
+              Our concierge team is available daily from 10:00 AM to 2:00 AM to assist you with tailored packages and bookings.
+            </p>
+            <div className="flex flex-wrap justify-center gap-4">
+              <Link 
+                href="/contact"
+                className="px-6 py-3 bg-[#F1A51D] hover:bg-[#d99010] text-white rounded-xl font-bold transition shadow-md text-sm"
+              >
+                Contact Support
+              </Link>
+              <a 
+                href="tel:+971509121111"
+                className="px-6 py-3 bg-white/10 hover:bg-white/20 border border-white/20 text-white rounded-xl font-bold transition text-sm"
+              >
+                Call: +971 50 912 1111
+              </a>
+            </div>
+          </div>
+        </section>
+      </main>
+
+      <Footer />
     </div>
   );
 }

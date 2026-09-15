@@ -1,5 +1,14 @@
 import type { Order, BookingRequest, VendorKYC, MetricCard } from './types';
 
+/**
+ * @deprecated These are mock constants for UI development only
+ * Real data should come from the database via API calls
+ * 
+ * For real orders: Use /api/orders
+ * For real vendor KYC: Use /api/admin/vendors
+ * For real metrics: Use /api/admin/stats
+ */
+
 export const MOCK_ORDERS: Order[] = [
   {
     id: 'ord-1',

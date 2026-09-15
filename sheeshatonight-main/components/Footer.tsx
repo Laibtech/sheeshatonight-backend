@@ -1,72 +1,253 @@
-import Link from 'next/link';
+"use client";
+
+import Link from "next/link";
+import {
+  Instagram,
+  Facebook,
+  Linkedin,
+  Music2,
+  Mail,
+  Phone,
+  MapPin,
+} from "lucide-react";
 
 export default function Footer() {
   return (
-    <footer className="bg-slate-900 text-white py-12">
-      <div className="container mx-auto px-6">
-        <div className="grid md:grid-cols-5 gap-8">
-          {/* About Us */}
-          <div>
-            <h3 className="text-lg font-bold mb-4">ABOUT US</h3>
-            <p className="text-sm text-slate-400">
-              SheeshaTonight is your go-to UAE platform to discover, book, and enjoy the best sheesha lounges and cafes near you.
+    <footer className="bg-[#571275] text-white">
+      <section className="border-b border-white/10">
+        <div className="max-w-[1440px] mx-auto px-4 sm:px-6 lg:px-8 py-14">
+          <div className="grid lg:grid-cols-2 gap-8 items-center">
+            <div>
+              <span className="text-[#F1A51D] text-[11px] uppercase tracking-[3px] font-bold">
+                Stay In The Loop
+              </span>
+
+              <h2 className="text-3xl sm:text-4xl font-bold mt-2">
+                Premium experiences,
+                <br />
+                straight to your inbox.
+              </h2>
+
+              <p className="text-white/60 text-sm mt-4 max-w-lg">
+                Get exclusive offers, new arrivals and the latest sheesha
+                experiences across the UAE.
+              </p>
+            </div>
+
+            <div>
+              <div className="flex bg-white rounded-xl p-1.5 max-w-[500px] lg:ml-auto">
+                <input
+                  type="email"
+                  placeholder="Enter your email address"
+                  className="flex-1 min-w-0 px-4 bg-transparent outline-none text-sm text-gray-700"
+                />
+
+                <button className="bg-[#F1A51D] hover:bg-[#d99010] text-white px-5 sm:px-7 rounded-lg text-sm font-bold transition">
+                  Subscribe
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <div className="max-w-[1440px] mx-auto px-4 sm:px-6 lg:px-8 py-14">
+        <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-5 gap-10">
+          <div className="col-span-2 lg:col-span-2">
+            <Link href="/">
+              <img
+                src="/logo.png"
+                alt="SheeshaTonight"
+                className="w-[125px] h-auto brightness-0 invert"
+              />
+            </Link>
+
+            <p className="text-white/60 text-sm leading-6 mt-5 max-w-[370px]">
+              Your premium destination for sheesha rentals, products,
+              flavors, accessories and unforgettable experiences across
+              the UAE.
             </p>
+
+            <div className="flex gap-3 mt-6">
+              <a
+                href="https://www.instagram.com/sheesha_tonight/"
+                target="_blank"
+                rel="noreferrer"
+                className="w-10 h-10 rounded-full bg-white/10 hover:bg-[#F1A51D] flex items-center justify-center transition"
+              >
+                <Instagram size={17} />
+              </a>
+
+              <a
+                href="https://www.facebook.com/sheeshatonight/"
+                target="_blank"
+                rel="noreferrer"
+                className="w-10 h-10 rounded-full bg-white/10 hover:bg-[#F1A51D] flex items-center justify-center transition"
+              >
+                <Facebook size={17} />
+              </a>
+
+              <a
+                href="https://www.linkedin.com/company/sheesha-tonight/"
+                target="_blank"
+                rel="noreferrer"
+                className="w-10 h-10 rounded-full bg-white/10 hover:bg-[#F1A51D] flex items-center justify-center transition"
+              >
+                <Linkedin size={17} />
+              </a>
+
+              <a
+                href="https://www.tiktok.com/@sheesha.tonight"
+                target="_blank"
+                rel="noreferrer"
+                className="w-10 h-10 rounded-full bg-white/10 hover:bg-[#F1A51D] flex items-center justify-center transition"
+              >
+                <Music2 size={17} />
+              </a>
+            </div>
           </div>
 
-          {/* Quick Links */}
           <div>
-            <h3 className="text-lg font-bold mb-4">QUICK LINKS</h3>
-            <ul className="space-y-2 text-sm">
-              <li><Link href="/about" className="text-slate-400 hover:text-[#D4AF37] transition">About Us</Link></li>
-              <li><Link href="/rentals" className="text-slate-400 hover:text-[#D4AF37] transition">Rentals (Book Sheesha)</Link></li>
-              <li><Link href="/make-your-sheesha" className="text-slate-400 hover:text-[#D4AF37] transition">Make Your Sheesha</Link></li>
-              <li><Link href="/blogs" className="text-slate-400 hover:text-[#D4AF37] transition">Blogs</Link></li>
-              <li><Link href="/contact" className="text-slate-400 hover:text-[#D4AF37] transition">Contact Us</Link></li>
-            </ul>
+            <h3 className="text-sm font-bold mb-5">SHOP</h3>
+
+            <div className="space-y-3 text-sm text-white/60">
+              <Link href="/shop" className="block hover:text-white">
+                All Products
+              </Link>
+              <Link href="/categories/flavors" className="block hover:text-white">
+                Sheesha Flavors
+              </Link>
+              <Link href="/categories/sheesha-setups" className="block hover:text-white">
+                Sheesha Setups
+              </Link>
+              <Link href="/categories/accessories" className="block hover:text-white">
+                Accessories
+              </Link>
+              <Link href="/categories/buy-sheesha" className="block hover:text-white">
+                Buy Sheesha
+              </Link>
+            </div>
           </div>
 
-          {/* Support */}
           <div>
-            <h3 className="text-lg font-bold mb-4">SUPPORT</h3>
-            <ul className="space-y-2 text-sm">
-              <li><Link href="/faqs" className="text-slate-400 hover:text-[#D4AF37] transition">FAQs</Link></li>
-              <li><Link href="/privacy" className="text-slate-400 hover:text-[#D4AF37] transition">Privacy Policy</Link></li>
-              <li><Link href="/help" className="text-slate-400 hover:text-[#D4AF37] transition">Help Center</Link></li>
-            </ul>
+            <h3 className="text-sm font-bold mb-5">RENTALS</h3>
+
+            <div className="space-y-3 text-sm text-white/60">
+              <Link href="/rentals" className="block hover:text-white">
+                All Rentals
+              </Link>
+              <Link href="/rentals?event=villa" className="block hover:text-white">
+                Villa
+              </Link>
+              <Link href="/rentals?event=yacht" className="block hover:text-white">
+                Yacht
+              </Link>
+              <Link href="/rentals?event=corporate" className="block hover:text-white">
+                Corporate
+              </Link>
+              <Link href="/rentals?event=weddings" className="block hover:text-white">
+                Weddings
+              </Link>
+              <Link href="/rentals?event=birthday" className="block hover:text-white">
+                Birthdays
+              </Link>
+              <Link href="/rentals?event=private" className="block hover:text-white">
+                Private Events
+              </Link>
+            </div>
           </div>
 
-          {/* For Vendors */}
           <div>
-            <h3 className="text-lg font-bold mb-4">FOR VENDORS</h3>
-            <ul className="space-y-2 text-sm">
-              <li><Link href="/auth/signup?role=vendor" className="text-slate-400 hover:text-[#D4AF37] transition">Join as Vendor</Link></li>
-              <li><Link href="/vendor-support" className="text-slate-400 hover:text-[#D4AF37] transition">Vendor Support</Link></li>
-            </ul>
-          </div>
+            <h3 className="text-sm font-bold mb-5">COMPANY</h3>
 
-          {/* Contact Us */}
-          <div>
-            <h3 className="text-lg font-bold mb-4">CONTACT US</h3>
-            <p className="text-sm text-slate-400 mb-2">
-              Have a question or want to reach out, we're always happy to connect.
-            </p>
-            <p className="text-sm text-slate-400 mb-1">
-              <strong>Email:</strong> support@sheeshatonight.com
-            </p>
-            <p className="text-sm text-slate-400 mb-4">
-              <strong>Phone:</strong> +971 50 123 1111
-            </p>
-            <p className="text-sm text-slate-400">
-              <strong>Location:</strong> Dubai, United Arab Emirates
-            </p>
+            <div className="space-y-3 text-sm text-white/60">
+              <Link href="/about" className="block hover:text-white">
+                About Us
+              </Link>
+              <Link href="/vendors" className="block hover:text-white">
+                Become a Vendor
+              </Link>
+              <Link href="/contact" className="block hover:text-white">
+                Contact
+              </Link>
+              <Link href="/faqs" className="block hover:text-white">
+                FAQ
+              </Link>
+              <Link href="/privacy" className="block hover:text-white">
+                Privacy Policy
+              </Link>
+              <Link href="/terms" className="block hover:text-white">
+                Terms & Conditions
+              </Link>
+            </div>
           </div>
         </div>
 
-        {/* Bottom Bar */}
-        <div className="border-t border-slate-800 mt-8 pt-8 text-center">
-          <p className="text-sm text-slate-400">
-            © 2026 <span className="text-[#D4AF37]">SheeshaTonight</span> All rights reserved. Powered by Worldwide Marketing & Consultancy Ltd.
+        <div className="grid sm:grid-cols-3 gap-4 mt-12 pt-8 border-t border-white/10">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-full bg-white/10 flex items-center justify-center">
+              <MapPin size={17} />
+            </div>
+            <div>
+              <p className="text-[10px] text-white/40 uppercase tracking-wider">
+                Location
+              </p>
+              <a
+                href="https://www.google.com/maps/search/?api=1&query=Dubai%2C+United+Arab+Emirates"
+                target="_blank"
+                rel="noreferrer"
+                className="text-sm hover:text-[#F1A51D]"
+              >
+                Dubai, United Arab Emirates
+              </a>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-full bg-white/10 flex items-center justify-center">
+              <Phone size={17} />
+            </div>
+            <div>
+              <p className="text-[10px] text-white/40 uppercase tracking-wider">
+                Phone
+              </p>
+              <a href="tel:+971509121111" className="text-sm hover:text-[#F1A51D]">
+                +971 50 912 1111
+              </a>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-full bg-white/10 flex items-center justify-center">
+              <Mail size={17} />
+            </div>
+            <div>
+              <p className="text-[10px] text-white/40 uppercase tracking-wider">
+                Email
+              </p>
+              <a
+                href="mailto:support@sheeshatonight.com"
+                className="text-sm hover:text-[#F1A51D]"
+              >
+                support@sheeshatonight.com
+              </a>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div className="border-t border-white/10">
+        <div className="max-w-[1440px] mx-auto px-4 sm:px-6 lg:px-8 py-5 flex flex-col sm:flex-row items-center justify-between gap-3">
+          <p className="text-xs text-white/40 text-center sm:text-left">
+            © {new Date().getFullYear()} SheeshaTonight. All rights reserved.
           </p>
+
+          <div className="flex items-center gap-2 text-xs text-white/40">
+            <span className="w-6 h-6 rounded-full border border-white/20 flex items-center justify-center font-bold">
+              18+
+            </span>
+            For adults only. Please enjoy responsibly.
+          </div>
         </div>
       </div>
     </footer>

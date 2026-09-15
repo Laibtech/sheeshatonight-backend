@@ -6,7 +6,7 @@ generator client {
 }
 
 datasource db {
-  provider = "postgresql"
+  provider = "mysql"
   url      = env("DATABASE_URL")
 }
 
@@ -31,6 +31,7 @@ model User {
   vendor    Vendor?
   orders    Order[]
   addresses Address[]
+  wishlistItems Wishlist[]
 
   @@index([email])
   @@index([role])
@@ -67,6 +68,7 @@ model Vendor {
   isActive        Boolean  @default(true)
   location        String? // JSON: { lat, lng, city, address }
   phone           String?
+  commissionRate  Decimal? @db.Decimal(5, 2) // Optional custom commission override (%)
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
 
@@ -126,7 +128,7 @@ model Product {
   price       Decimal  @db.Decimal(10, 2)
   currency    String   @default("AED")
   stock       Int      @default(0)
-  images      String[] // JSON array URLs
+  images      Json?    // JSON array of image URLs
   sku         String?  @unique
   isActive    Boolean  @default(true)
   isFeatured  Boolean  @default(false)
@@ -138,6 +140,8 @@ model Product {
 
   // Relations
   orderItems  OrderItem[]
+  cartItems   Cart[]
+  wishlistItems Wishlist[]
 
   @@index([vendorId])
   @@index([type])
@@ -163,6 +167,13 @@ model Order {
   status          OrderStatus @default(PREPARING)
   totalAmount     Decimal  @db.Decimal(10, 2)
   currency        String   @default("AED")
+  subtotal        Decimal? @db.Decimal(10, 2)
+  shippingFee     Decimal  @default(0.00) @db.Decimal(10, 2)
+  discountAmount  Decimal  @default(0.00) @db.Decimal(10, 2)
+  commissionRate  Decimal? @db.Decimal(5, 2) // Applied commission percentage (e.g. 10.00)
+  platformFee     Decimal  @default(0.00) @db.Decimal(10, 2) // Platform commission amount
+  vendorNet       Decimal  @default(0.00) @db.Decimal(10, 2) // Net payable to vendor
+  payoutStatus    PayoutStatus @default(PENDING)
   rentalStartDate DateTime?
   rentalEndDate   DateTime?
   deliveryDate    DateTime?
@@ -196,6 +207,14 @@ enum OrderStatus {
   CANCELLED          // Order cancelled
 }
 
+enum PayoutStatus {
+  PENDING
+  ELIGIBLE
+  PAID
+  FAILED
+  REFUNDED
+}
+
 model OrderItem {
   id        String   @id @default(cuid())
   orderId   String
@@ -219,7 +238,7 @@ model OrderTracking {
   locationLng     Decimal? @db.Decimal(10, 8)
   estimatedDelivery DateTime?
   lastUpdated     DateTime @updatedAt
-  events          String[] // JSON array of tracking events
+  events          Json?    // JSON array of tracking events
 
   @@index([orderId])
 }
@@ -284,6 +303,22 @@ model Cart {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
+  // Relations
+  product   Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, productId])
+  @@index([userId])
+  @@index([productId])
+}
+
+model Wishlist {
+  id        String   @id @default(cuid())
+  userId    String
+  productId String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  product   Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+
   @@unique([userId, productId])
   @@index([userId])
   @@index([productId])
@@ -320,4 +355,95 @@ model AuditLog {
   @@index([resourceType])
   @@index([action])
   @@index([createdAt])
+}
+
+model Category {
+  id          String   @id @default(cuid())
+  name        String   @unique
+  slug        String   @unique
+  description String?
+  image       String?
+  isActive    Boolean  @default(true)
+  isFeatured  Boolean  @default(false)
+  sortOrder   Int      @default(0)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+model Coupon {
+  id             String    @id @default(cuid())
+  code           String    @unique
+  discountType   String    @default("PERCENTAGE")
+  discountValue  Decimal   @db.Decimal(10, 2)
+  minOrderAmount Decimal?  @db.Decimal(10, 2)
+  maxDiscount    Decimal?  @db.Decimal(10, 2)
+  usageLimit     Int?
+  usageCount     Int       @default(0)
+  startDate      DateTime?
+  expiryDate     DateTime?
+  isActive       Boolean   @default(true)
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+}
+
+model Review {
+  id        String   @id @default(cuid())
+  userId    String
+  productId String?
+  vendorId  String?
+  rating    Int      @default(5)
+  comment   String?
+  status    String   @default("APPROVED")
+  createdAt DateTime @default(now())
+
+  @@index([userId])
+  @@index([productId])
+  @@index([vendorId])
+}
+
+model CmsBanner {
+  id          String    @id @default(cuid())
+  heading     String
+  subtitle    String?
+  ctaText     String?
+  ctaUrl      String?
+  desktopImg  String?
+  mobileImg   String?
+  position    String    @default("HOMEPAGE_HERO")
+  sortOrder   Int       @default(0)
+  isActive    Boolean   @default(true)
+  startDate   DateTime?
+  endDate     DateTime?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+}
+
+model CmsPage {
+  id             String   @id @default(cuid())
+  title          String
+  slug           String   @unique
+  content        String   @db.Text
+  seoTitle       String?
+  seoDescription String?
+  isActive       Boolean  @default(true)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+}
+
+model CmsContent {
+  id        String   @id @default(cuid())
+  key       String   @unique
+  value     Json
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model PlatformSetting {
+  id              String   @id @default(cuid())
+  key             String   @unique
+  commissionType  String   @default("PERCENTAGE") // PERCENTAGE or FIXED
+  commissionValue Decimal  @default(10.00) @db.Decimal(10, 2)
+  fixedFee        Decimal  @default(0.00) @db.Decimal(10, 2)
+  description     String?
+  updatedAt       DateTime @updatedAt
 }

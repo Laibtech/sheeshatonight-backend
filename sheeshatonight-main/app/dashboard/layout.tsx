@@ -1,7 +1,7 @@
 'use client';
 
 import { ProtectedRoute } from '@/components/ProtectedRoute';
-import { UnifiedDashboardLayout } from '@/components/UnifiedDashboardLayout';
+import { CustomerPortalLayout } from '@/components/CustomerPortalLayout';
 
 export default function CustomerDashboardLayout({
   children,
@@ -9,10 +9,10 @@ export default function CustomerDashboardLayout({
   children: React.ReactNode;
 }) {
   return (
-    <ProtectedRoute allowedRoles={['CUSTOMER']}>
-      <UnifiedDashboardLayout>
+    <ProtectedRoute allowedRoles={['CUSTOMER', 'ADMIN']}>
+      <CustomerPortalLayout>
         {children}
-      </UnifiedDashboardLayout>
+      </CustomerPortalLayout>
     </ProtectedRoute>
   );
 }

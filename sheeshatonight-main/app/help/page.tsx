@@ -143,7 +143,7 @@ export default function HelpPage() {
       </header>
 
       {/* Hero Section with Search */}
-      <section className="pt-32 pb-16 bg-gradient-to-br from-[#D4AF37]/10 to-[#B8902A]/5">
+      <section className="site-page-hero">
         <div className="container mx-auto px-6">
           <div className="max-w-3xl mx-auto text-center">
             <h1 className="text-5xl md:text-6xl font-bold text-slate-900 mb-6">

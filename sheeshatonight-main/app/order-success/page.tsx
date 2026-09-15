@@ -1,12 +1,14 @@
 'use client';
 
 import Link from 'next/link';
+import { Suspense } from 'react';
+import { useSearchParams } from 'next/navigation';
 import { CheckCircle, Package, Truck, Home } from 'lucide-react';
 import PageLayout from '@/components/PageLayout';
 
-export default function OrderSuccessPage() {
-  // In a real app, you would get order details from the URL params or API
-  const orderNumber = 'ST' + Math.floor(Math.random() * 1000000);
+function OrderSuccessContent() {
+  const searchParams = useSearchParams();
+  const orderNumbers = searchParams.get('orders')?.split(',').filter(Boolean) || [];
   const estimatedDelivery = new Date(Date.now() + 2 * 24 * 60 * 60 * 1000).toLocaleDateString('en-GB', {
     weekday: 'long',
     year: 'numeric',
@@ -36,7 +38,9 @@ export default function OrderSuccessPage() {
                 <div className="flex justify-between items-center">
                   <div>
                     <p className="text-sm text-slate-500 mb-1">Order Number</p>
-                    <p className="text-2xl font-bold text-slate-900">{orderNumber}</p>
+                    <p className="text-2xl font-bold text-slate-900">
+                      {orderNumbers.length > 0 ? orderNumbers.join(', ') : 'Order details unavailable'}
+                    </p>
                   </div>
                   <div className="text-right">
                     <p className="text-sm text-slate-500 mb-1">Order Date</p>
@@ -135,11 +139,11 @@ export default function OrderSuccessPage() {
             {/* Action Buttons */}
             <div className="grid md:grid-cols-2 gap-4">
               <Link
-                href="/dashboard/bookings"
+                href="/dashboard/orders"
                 className="flex items-center justify-center gap-2 px-6 py-4 bg-gradient-to-r from-[#D4AF37] to-[#B8902A] text-white rounded-lg font-semibold hover:shadow-xl transition"
               >
                 <Package className="w-5 h-5" />
-                Track Order
+                View Order
               </Link>
               
               <Link
@@ -165,5 +169,26 @@ export default function OrderSuccessPage() {
         </div>
       </div>
     </PageLayout>
+  );
+}
+
+export default function OrderSuccessPage() {
+  return (
+    <Suspense fallback={
+      <PageLayout>
+        <div className="pt-32 pb-20">
+          <div className="container mx-auto px-6">
+            <div className="max-w-2xl mx-auto text-center">
+              <div className="inline-flex items-center justify-center w-24 h-24 bg-green-100 rounded-full mb-6">
+                <CheckCircle className="w-16 h-16 text-green-600" />
+              </div>
+              <h1 className="text-4xl font-bold text-slate-900 mb-4">Loading your order...</h1>
+            </div>
+          </div>
+        </div>
+      </PageLayout>
+    }>
+      <OrderSuccessContent />
+    </Suspense>
   );
 }

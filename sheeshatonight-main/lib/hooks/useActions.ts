@@ -28,22 +28,30 @@ export const useActions = () => {
 
         if (scope === 'admin') {
           if (resource === 'vendor') {
-            response = await adminAPI.vendorAction(id, action);
+            response = await adminAPI.updateVendor(id, { status: action });
           } else if (resource === 'product') {
-            response = await adminAPI.productAction(id, action);
+            if (action === 'delete') {
+              response = await adminAPI.deleteProduct(id);
+            } else {
+              response = await adminAPI.updateProduct(id, { action });
+            }
           } else if (resource === 'user') {
-            response = await adminAPI.userAction(id, action);
+            response = await adminAPI.updateUser(id, { status: action });
           }
         } else if (scope === 'vendor') {
           if (resource === 'vendor-product') {
-            response = await vendorAPI.productAction(id, action);
+            if (action === 'delete') {
+              response = await adminAPI.deleteProduct(id);
+            } else {
+              response = await vendorAPI.productAction(id, action);
+            }
           }
         } else if (resource === 'order') {
           response = await orderAPI.performAction(id, action);
         }
 
-        if (!response?.success) {
-          throw new Error(response?.error || 'Action failed');
+        if (!response || response.success === false) {
+          throw new Error(response?.error || response?.message || 'Action failed');
         }
 
         return {

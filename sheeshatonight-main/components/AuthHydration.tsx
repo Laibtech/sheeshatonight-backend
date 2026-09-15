@@ -37,6 +37,7 @@ export const AuthHydration: React.FC = () => {
       CUSTOMER: 'CUSTOMER_DASHBOARD',
       VENDOR: 'VENDOR_PORTAL',
       ADMIN: 'ADMIN_PANEL',
+      SUPER_ADMIN: 'ADMIN_PANEL',
     };
 
     setCurrentScreen(screenMap[role]);

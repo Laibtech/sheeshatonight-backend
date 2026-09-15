@@ -1,0 +1,401 @@
+'use client';
+
+import React, { useState } from 'react';
+import Link from 'next/link';
+import { usePathname, useSearchParams } from 'next/navigation';
+import {
+  LayoutDashboard,
+  ShoppingBag,
+  Package,
+  Store,
+  Users,
+  Tag,
+  FileText,
+  DollarSign,
+  Bell,
+  BarChart3,
+  ShieldAlert,
+  Settings,
+  ChevronDown,
+  X,
+  ExternalLink,
+} from 'lucide-react';
+
+interface SidebarProps {
+  collapsed: boolean;
+  mobileOpen: boolean;
+  onCloseMobile: () => void;
+  pendingCounts?: {
+    orders?: number;
+    vendors?: number;
+    notifications?: number;
+  };
+}
+
+interface SubMenuItem {
+  title: string;
+  href: string;
+}
+
+interface NavSection {
+  title: string;
+  href: string;
+  icon: React.ElementType;
+  badge?: number;
+  subItems?: SubMenuItem[];
+}
+
+export const Sidebar: React.FC<SidebarProps> = ({
+  collapsed,
+  mobileOpen,
+  onCloseMobile,
+  pendingCounts = {},
+}) => {
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
+  const [openSubMenus, setOpenSubMenus] = useState<Record<string, boolean>>({
+    Orders: true,
+    Products: false,
+    Vendors: false,
+    Customers: false,
+  });
+
+  const toggleSubMenu = (title: string) => {
+    if (collapsed) return;
+    setOpenSubMenus((prev) => ({ ...prev, [title]: !prev[title] }));
+  };
+
+  const navItems: NavSection[] = [
+    {
+      title: 'Dashboard',
+      href: '/admin',
+      icon: LayoutDashboard,
+    },
+    {
+      title: 'Orders',
+      href: '/admin/orders',
+      icon: ShoppingBag,
+      badge: pendingCounts.orders,
+      subItems: [
+        { title: 'All Orders', href: '/admin/orders' },
+        { title: 'Pending', href: '/admin/orders?status=PREPARING' },
+        { title: 'Processing', href: '/admin/orders?status=READY_FOR_PICKUP' },
+        { title: 'Shipped', href: '/admin/orders?status=OUT_FOR_DELIVERY' },
+        { title: 'Delivered', href: '/admin/orders?status=DELIVERED' },
+        { title: 'Cancelled', href: '/admin/orders?status=CANCELLED' },
+      ],
+    },
+    {
+      title: 'Products',
+      href: '/admin/products',
+      icon: Package,
+      subItems: [
+        { title: 'All Products', href: '/admin/products' },
+        { title: 'Add Product', href: '/admin/products/new' },
+        { title: 'Categories', href: '/admin/categories' },
+        { title: 'Inventory', href: '/admin/products?stock=low' },
+      ],
+    },
+    {
+      title: 'Vendors',
+      href: '/admin/vendors',
+      icon: Store,
+      badge: pendingCounts.vendors,
+      subItems: [
+        { title: 'All Vendors', href: '/admin/vendors' },
+        { title: 'Pending Vendors', href: '/admin/vendors?status=pending' },
+        { title: 'Vendor Documents', href: '/admin/vendors/documents' },
+        { title: 'Settlements', href: '/admin/settlements' },
+      ],
+    },
+    {
+      title: 'Customers',
+      href: '/admin/customers',
+      icon: Users,
+      subItems: [
+        { title: 'All Customers', href: '/admin/customers' },
+        { title: 'Customer Reviews', href: '/admin/reviews' },
+        { title: 'Wishlist Activity', href: '/admin/customers?tab=wishlist' },
+      ],
+    },
+    {
+      title: 'Marketing',
+      href: '/admin/coupons',
+      icon: Tag,
+      subItems: [
+        { title: 'Coupons', href: '/admin/coupons' },
+        { title: 'Banners', href: '/admin/cms/banners' },
+      ],
+    },
+    {
+      title: 'Content',
+      href: '/admin/cms/pages',
+      icon: FileText,
+      subItems: [
+        { title: 'Pages', href: '/admin/cms/pages' },
+        { title: 'CMS Content', href: '/admin/cms' },
+        { title: 'Homepage Banners', href: '/admin/cms/banners' },
+        { title: 'SEO & Meta', href: '/admin/seo' },
+      ],
+    },
+    {
+      title: 'Finance',
+      href: '/admin/invoices',
+      icon: DollarSign,
+      subItems: [
+        { title: 'Invoices', href: '/admin/invoices' },
+        { title: 'Settlements', href: '/admin/settlements' },
+      ],
+    },
+    {
+      title: 'Notifications',
+      href: '/admin/notifications',
+      icon: Bell,
+      badge: pendingCounts.notifications,
+    },
+    {
+      title: 'Reports',
+      href: '/admin/reports',
+      icon: BarChart3,
+    },
+    {
+      title: 'Audit Logs',
+      href: '/admin/audit-logs',
+      icon: ShieldAlert,
+    },
+    {
+      title: 'Settings',
+      href: '/admin/settings',
+      icon: Settings,
+    },
+  ];
+
+  const isLinkActive = (href: string) => {
+    const [path, query] = href.split('?');
+    if (!path) return false;
+    if (path === '/admin') {
+      return pathname === '/admin';
+    }
+    if (pathname === path) {
+      if (!query) {
+        // If current url has no search params or not matching
+        return !searchParams.toString();
+      }
+      const [paramKey, paramVal] = query.split('=');
+      if (!paramKey) return false;
+      return searchParams.get(paramKey) === (paramVal || '');
+    }
+    return Boolean(pathname?.startsWith(path) && !query);
+  };
+
+
+  const isParentActive = (item: NavSection) => {
+    if (item.href === '/admin') return pathname === '/admin';
+    if (pathname.startsWith(item.href)) return true;
+    if (item.subItems) {
+      return item.subItems.some((sub) => pathname === sub.href.split('?')[0]);
+    }
+    return false;
+  };
+
+  const sidebarContent = (
+    <div className="flex flex-col h-full bg-white border-r border-[#E9E3EB] select-none">
+      {/* Brand Header */}
+      <div className="h-16 px-5 border-b border-[#E9E3EB] flex items-center justify-between">
+        {!collapsed ? (
+          <Link href="/admin" className="flex items-center gap-3 group">
+            <div className="w-8 h-8 rounded-xl bg-gradient-to-br from-[#74189B] to-[#571275] flex items-center justify-center text-white font-black text-xs shadow-xs border border-purple-800">
+              ST
+            </div>
+            <div>
+              <div className="flex items-center gap-1.5">
+                <span className="font-extrabold text-sm text-[#29252B] tracking-tight">
+                  SheeshaTonight
+                </span>
+                <span className="text-[10px] px-1.5 py-0.2 bg-[#F1A51D]/15 text-[#9E6500] font-black rounded-sm">
+                  ADMIN
+                </span>
+              </div>
+              <p className="text-[10px] font-bold text-[#74189B] tracking-wider uppercase">
+                Operations & CMS
+              </p>
+            </div>
+          </Link>
+        ) : (
+          <Link
+            href="/admin"
+            className="w-9 h-9 rounded-xl bg-gradient-to-br from-[#74189B] to-[#571275] flex items-center justify-center text-white font-black text-xs mx-auto shadow-xs border border-purple-800"
+            title="SheeshaTonight Admin"
+          >
+            ST
+          </Link>
+        )}
+
+        {mobileOpen && (
+          <button
+            onClick={onCloseMobile}
+            className="lg:hidden p-1.5 rounded-lg text-slate-400 hover:text-slate-600 hover:bg-slate-100"
+          >
+            <X className="w-5 h-5" />
+          </button>
+        )}
+      </div>
+
+      {/* Navigation List */}
+      <nav className="flex-1 py-4 px-3 overflow-y-auto space-y-1 scrollbar-thin">
+        {navItems.map((item) => {
+          const Icon = item.icon;
+          const hasSubItems = item.subItems && item.subItems.length > 0;
+          const parentActive = isParentActive(item);
+          const isOpen = openSubMenus[item.title] || false;
+
+          return (
+            <div key={item.title} className="space-y-0.5">
+              {hasSubItems ? (
+                <div>
+                  <button
+                    onClick={() => toggleSubMenu(item.title)}
+                    className={`w-full flex items-center justify-between px-3 py-2 rounded-xl text-xs font-semibold transition group ${
+                      parentActive
+                        ? 'bg-[#74189B]/10 text-[#74189B] font-bold'
+                        : 'text-[#716975] hover:bg-[#FAF8FB] hover:text-[#29252B]'
+                    } ${collapsed ? 'justify-center px-2' : ''}`}
+                    title={collapsed ? item.title : undefined}
+                  >
+                    <div className="flex items-center gap-3">
+                      <Icon
+                        className={`w-4 h-4 flex-shrink-0 ${
+                          parentActive ? 'text-[#74189B]' : 'text-slate-400 group-hover:text-slate-600'
+                        }`}
+                      />
+                      {!collapsed && <span>{item.title}</span>}
+                    </div>
+
+                    {!collapsed && (
+                      <div className="flex items-center gap-1.5">
+                        {item.badge !== undefined && item.badge > 0 && (
+                          <span className="px-1.5 py-0.2 bg-[#F1A51D] text-white text-[10px] font-black rounded-full shadow-xs">
+                            {item.badge}
+                          </span>
+                        )}
+                        <ChevronDown
+                          className={`w-3.5 h-3.5 text-slate-400 transition-transform ${
+                            isOpen ? 'rotate-180' : ''
+                          }`}
+                        />
+                      </div>
+                    )}
+                  </button>
+
+                  {/* Submenu items */}
+                  {!collapsed && isOpen && (
+                    <div className="ml-7 pl-2.5 border-l-2 border-[#E9E3EB] my-1 space-y-0.5">
+                      {item.subItems!.map((sub) => {
+                        const active = isLinkActive(sub.href);
+                        return (
+                          <Link
+                            key={sub.title}
+                            href={sub.href}
+                            onClick={() => {
+                              if (mobileOpen) onCloseMobile();
+                            }}
+                            className={`block py-1.5 px-2.5 rounded-lg text-xs transition ${
+                              active
+                                ? 'bg-[#74189B] text-white font-bold shadow-xs'
+                                : 'text-[#716975] hover:bg-[#FAF8FB] hover:text-[#29252B]'
+                            }`}
+                          >
+                            {sub.title}
+                          </Link>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+              ) : (
+                <Link
+                  href={item.href}
+                  onClick={() => {
+                    if (mobileOpen) onCloseMobile();
+                  }}
+                  className={`flex items-center justify-between px-3 py-2 rounded-xl text-xs font-semibold transition group ${
+                    parentActive
+                      ? 'bg-[#74189B] text-white font-bold shadow-xs'
+                      : 'text-[#716975] hover:bg-[#FAF8FB] hover:text-[#29252B]'
+                  } ${collapsed ? 'justify-center px-2' : ''}`}
+                  title={collapsed ? item.title : undefined}
+                >
+                  <div className="flex items-center gap-3">
+                    <Icon
+                      className={`w-4 h-4 flex-shrink-0 ${
+                        parentActive ? 'text-white' : 'text-slate-400 group-hover:text-slate-600'
+                      }`}
+                    />
+                    {!collapsed && <span>{item.title}</span>}
+                  </div>
+
+                  {!collapsed && item.badge !== undefined && item.badge > 0 && (
+                    <span className="px-1.5 py-0.2 bg-[#F1A51D] text-white text-[10px] font-black rounded-full shadow-xs">
+                      {item.badge}
+                    </span>
+                  )}
+                </Link>
+              )}
+            </div>
+          );
+        })}
+      </nav>
+
+      {/* Footer link to public website */}
+      <div className="p-3 border-t border-[#E9E3EB] bg-[#FAF8FB]/60">
+        {!collapsed ? (
+          <a
+            href="/"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="flex items-center justify-between px-3 py-2 bg-white hover:bg-slate-50 text-[#716975] hover:text-[#74189B] rounded-xl border border-[#E9E3EB] text-xs font-bold transition shadow-xs"
+          >
+            <span className="truncate">View Storefront</span>
+            <ExternalLink className="w-3.5 h-3.5 flex-shrink-0 text-slate-400" />
+          </a>
+        ) : (
+          <a
+            href="/"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="flex items-center justify-center p-2 text-slate-400 hover:text-[#74189B]"
+            title="View Storefront"
+          >
+            <ExternalLink className="w-4 h-4" />
+          </a>
+        )}
+      </div>
+    </div>
+  );
+
+  return (
+    <>
+      {/* Desktop fixed sidebar */}
+      <aside
+        className={`hidden lg:block fixed top-0 bottom-0 left-0 z-30 transition-all duration-300 ${
+          collapsed ? 'w-20' : 'w-64'
+        }`}
+      >
+        {sidebarContent}
+      </aside>
+
+      {/* Mobile Drawer */}
+      {mobileOpen && (
+        <div className="fixed inset-0 z-50 lg:hidden flex">
+          <div
+            className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs"
+            onClick={onCloseMobile}
+          />
+          <div className="relative w-64 h-full z-50 shadow-2xl animate-in slide-in-from-left duration-200">
+            {sidebarContent}
+          </div>
+        </div>
+      )}
+    </>
+  );
+};

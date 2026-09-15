@@ -55,11 +55,11 @@ export const POST = withVendor(async (req: AuthenticatedRequest) => {
     const validation = createProductSchema.safeParse(body);
 
     if (!validation.success) {
-      return errorResponse('Validation failed', 400, 'VALIDATION_ERROR',
-        Object.fromEntries(
-          validation.error.errors.map(e => [e.path.join('.'), e.message])
-        )
+      const errorMap = Object.fromEntries(
+        validation.error.errors.map(e => [e.path.join('.'), e.message])
       );
+      const readableErrors = Object.entries(errorMap).map(([field, msg]) => `${field}: ${msg}`).join(', ');
+      return errorResponse(`Validation failed: ${readableErrors}`, 400, 'VALIDATION_ERROR', errorMap);
     }
 
     const product = await prisma.product.create({

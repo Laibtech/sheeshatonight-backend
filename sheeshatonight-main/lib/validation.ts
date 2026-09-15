@@ -95,7 +95,7 @@ export const createProductSchema = z.object({
   price: priceSchema,
   currency: z.string().length(3, 'Currency must be 3-letter code (e.g., AED)').default('AED'),
   stock: z.number().int().min(0, 'Stock cannot be negative').default(0),
-  images: z.array(z.string().url('Invalid image URL')).min(1, 'At least one image is required'),
+  images: z.array(z.string().min(1, 'Image path or URL is required')).min(1, 'At least one image is required'),
   sku: z.string().max(50).optional(),
 });
 

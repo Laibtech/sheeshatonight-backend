@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 
-export type UserRole = 'CUSTOMER' | 'VENDOR' | 'ADMIN';
+export type UserRole = 'CUSTOMER' | 'VENDOR' | 'ADMIN' | 'SUPER_ADMIN';
 export type ViewScreen = 'AUTH' | 'CUSTOMER_DASHBOARD' | 'VENDOR_PORTAL' | 'ADMIN_PANEL';
 
 export interface AuthState {

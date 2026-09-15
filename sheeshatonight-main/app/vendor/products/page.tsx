@@ -1,159 +1,543 @@
 'use client';
 
-import React, { useState, useCallback } from 'react';
-import { DataTable } from '@/components/DataTable';
-import { Package, Plus, Edit3, Trash2 } from 'lucide-react';
-import ActionModal from '@/components/ActionModal';
-import { useActions } from '@/lib/hooks/useActions';
+import React, { useState, useEffect } from 'react';
+import { Package, Plus, Search, Edit2, Trash2, CheckCircle2, XCircle, RefreshCw, X } from 'lucide-react';
+import { ImageUploader } from '@/components/ImageUploader';
 import { Toast } from '@/components/Toast';
 
-const initialProducts = [
-  { id: 'VP-101', name: 'Emerald Sheesha Pack', price: 'AED 360', stock: 18, status: 'Active' },
-  { id: 'VP-102', name: 'Gold Hookah Set', price: 'AED 780', stock: 6, status: 'Active' },
-  { id: 'VP-103', name: 'Signature Tobacco Blend', price: 'AED 220', stock: 24, status: 'Paused' },
-];
+interface ProductItem {
+  id: string;
+  title: string;
+  description?: string;
+  price: number | string;
+  stock: number;
+  type: string;
+  sku?: string;
+  images?: any;
+  isActive: boolean;
+  isFeatured: boolean;
+  createdAt: string;
+}
 
-export default function VendorProducts() {
-  const [products, setProducts] = useState(initialProducts);
-  const { performAction } = useActions();
-  const [actionModal, setActionModal] = useState({
-    isOpen: false,
-    type: 'toggle-active' as any,
-    productId: '',
-    productName: '',
-  });
+export default function VendorProductsPage() {
+  const [products, setProducts] = useState<ProductItem[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [search, setSearch] = useState('');
+  const [showAddModal, setShowAddModal] = useState(false);
+  const [editingProduct, setEditingProduct] = useState<ProductItem | null>(null);
+
+  // Form states
+  const [title, setTitle] = useState('');
+  const [description, setDescription] = useState('');
+  const [price, setPrice] = useState('');
+  const [stock, setStock] = useState('10');
+  const [type, setType] = useState('TOBACCO_BLEND');
+  const [sku, setSku] = useState('');
+  const [imageUrl, setImageUrl] = useState('');
+
+  // Toast
   const [toastOpen, setToastOpen] = useState(false);
   const [toastMessage, setToastMessage] = useState('');
-  const [toastType, setToastType] = useState<'success' | 'error' | 'info'>('success');
-  const [loadingIds, setLoadingIds] = useState(new Set<string | number>());
+  const [toastType, setToastType] = useState<'success' | 'error'>('success');
 
   const showToast = (message: string, variant: 'success' | 'error' = 'success') => {
     setToastMessage(message);
-    setToastType(variant === 'error' ? 'error' : 'success');
+    setToastType(variant);
     setToastOpen(true);
   };
 
-  const handleAction = useCallback((productId: string, action: string, productName: string) => {
-    setActionModal({ isOpen: true, type: action, productId, productName });
+  const getAuthToken = () => {
+    if (typeof window === 'undefined') return '';
+    let token = localStorage.getItem('auth_token');
+    if (!token) {
+      const match = document.cookie.match(/(?:^|; )auth_token=([^;]*)/);
+      if (match && match[1]) token = decodeURIComponent(match[1]);
+    }
+    return token || '';
+  };
+
+  useEffect(() => {
+    fetchProducts();
+    if (typeof window !== 'undefined') {
+      const sp = new URLSearchParams(window.location.search);
+      if (sp.get('add') === 'true') {
+        handleOpenAddModal();
+      }
+    }
   }, []);
 
-  const confirmAction = useCallback(async () => {
-    const { productId, type } = actionModal;
+  const fetchProducts = async () => {
+    try {
+      setLoading(true);
+      const token = getAuthToken();
+      const res = await fetch('/api/vendor/products', {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      const data = await res.json();
+      if (data.success && Array.isArray(data.data?.data)) {
+        setProducts(data.data.data);
+      } else if (data.success && Array.isArray(data.data)) {
+        setProducts(data.data);
+      } else {
+        throw new Error(data.error || 'Failed to load vendor products');
+      }
+    } catch (err) {
+      console.error('Failed to fetch products:', err);
+      showToast('Failed to load your products', 'error');
+    } finally {
+      setLoading(false);
+    }
+  };
 
-    setLoadingIds(prev => new Set(prev).add(productId));
+  const handleOpenAddModal = () => {
+    setTitle('');
+    setDescription('');
+    setPrice('');
+    setStock('10');
+    setType('TOBACCO_BLEND');
+    setSku(`SKU-${Date.now().toString().slice(-6)}`);
+    setImageUrl('https://images.unsplash.com/photo-1527661591475-527312dd65f5?w=600');
+    setShowAddModal(true);
+  };
+
+  const handleOpenEditModal = (p: ProductItem) => {
+    setEditingProduct(p);
+    setTitle(p.title);
+    setDescription(p.description || '');
+    setPrice(p.price.toString());
+    setStock(p.stock.toString());
+    setType(p.type || 'TOBACCO_BLEND');
+    setSku(p.sku || '');
+    let img = '';
+    if (p.images) {
+      if (Array.isArray(p.images)) img = p.images[0] || '';
+      else if (typeof p.images === 'string') {
+        try {
+          const parsed = JSON.parse(p.images);
+          img = Array.isArray(parsed) ? parsed[0] : p.images;
+        } catch {
+          img = p.images;
+        }
+      }
+    }
+    setImageUrl(img || 'https://images.unsplash.com/photo-1527661591475-527312dd65f5?w=600');
+  };
+
+  const handleCreateProduct = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!title.trim()) {
+      showToast('Product title is required', 'error');
+      return;
+    }
+    const numPrice = Number(price);
+    if (isNaN(numPrice) || numPrice <= 0) {
+      showToast('Please enter a valid positive price in AED', 'error');
+      return;
+    }
 
     try {
-      const result = await performAction('vendor-product', productId, type, 'vendor');
-
-      if (result.success) {
-        // Update local state
-        if (type === 'delete') {
-          setProducts(prev => prev.filter(p => p.id !== productId));
-        } else {
-          setProducts(prev =>
-            prev.map(p =>
-              p.id === productId
-                ? {
-                    ...p,
-                    status: type === 'toggle-active' ? (p.status === 'Active' ? 'Paused' : 'Active') : p.status,
-                  }
-                : p
-            )
-          );
-        }
-
-        const actionText = type === 'toggle-active' ? 'toggled' : type;
-        showToast(`Product ${actionText} successfully`, 'success');
-        setActionModal({ isOpen: false, type: '', productId: '', productName: '' });
-      } else {
-        showToast(result.error || `Failed to ${type} product`, 'error');
-      }
-    } catch (error) {
-      showToast(`Error: ${error instanceof Error ? error.message : 'Unknown error'}`, 'error');
-    } finally {
-      setLoadingIds(prev => {
-        const next = new Set(prev);
-        next.delete(productId);
-        return next;
+      const token = getAuthToken();
+      const res = await fetch('/api/vendor/products', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          title: title.trim(),
+          description: description?.trim() || undefined,
+          price: Number(numPrice.toFixed(2)),
+          stock: parseInt(stock) || 0,
+          type,
+          sku: sku?.trim() || `SKU-${Date.now().toString().slice(-6)}`,
+          images: [imageUrl || 'https://images.unsplash.com/photo-1527661591475-527312dd65f5?w=600'],
+        }),
       });
+      const data = await res.json();
+      if (data.success) {
+        showToast('Product saved successfully to database!', 'success');
+        setShowAddModal(false);
+        fetchProducts();
+      } else {
+        const msg = data.message || data.error || (data.details ? Object.values(data.details).join(', ') : 'Failed to save product');
+        showToast(msg, 'error');
+      }
+    } catch (err: any) {
+      showToast('Error saving product: ' + (err.message || 'Server error'), 'error');
     }
-  }, [actionModal, performAction]);
+  };
+
+  const handleSaveEditProduct = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingProduct) return;
+    try {
+      const token = getAuthToken();
+      const res = await fetch(`/api/vendor/products/${editingProduct.id}`, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          title,
+          description,
+          price: Number(price),
+          stock: Number(stock),
+          type,
+          sku,
+          images: [imageUrl || 'https://images.unsplash.com/photo-1527661591475-527312dd65f5?w=600'],
+        }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        showToast('Product updated successfully!', 'success');
+        setEditingProduct(null);
+        fetchProducts();
+      } else {
+        showToast(data.message || 'Failed to update product', 'error');
+      }
+    } catch (err: any) {
+      showToast('Error updating product: ' + (err.message || 'Server error'), 'error');
+    }
+  };
+
+  const handleDeleteProduct = async (id: string) => {
+    if (!confirm('Are you sure you want to delete this product?')) return;
+    try {
+      const token = getAuthToken();
+      const res = await fetch(`/api/vendor/products/${id}`, {
+        method: 'DELETE',
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      const data = await res.json();
+      if (data.success) {
+        showToast('Product deleted successfully!', 'success');
+        setProducts((currentProducts) => currentProducts.filter((product) => product.id !== id));
+      } else {
+        showToast(data.error || data.message || 'Failed to delete product', 'error');
+      }
+    } catch (err: any) {
+      showToast('Error deleting product', 'error');
+    }
+  };
+
+  const filteredProducts = products.filter(
+    (p) =>
+      p.title.toLowerCase().includes(search.toLowerCase()) ||
+      (p.sku && p.sku.toLowerCase().includes(search.toLowerCase()))
+  );
 
   return (
-    <>
-      <main className="flex-1 overflow-y-auto lg:ml-64 pt-20 lg:pt-10">
-        <div className="max-w-7xl mx-auto p-6 lg:p-8">
-          <div className="mb-8 flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
-            <div>
-              <p className="text-sm uppercase tracking-[0.3em] text-amber-500 font-semibold">Product Management</p>
-              <h1 className="text-3xl font-black text-slate-900 mt-3">Marketplace Inventory</h1>
-              <p className="text-slate-600 mt-2">Manage product assets, pricing, and publish status for your vendor store.</p>
-            </div>
-            <button className="inline-flex items-center gap-2 rounded-3xl bg-amber-500 px-5 py-3 text-white font-semibold shadow-lg shadow-amber-500/20 transition hover:bg-amber-600">
-              <Plus size={18} /> Add Product
+    <div className="space-y-6">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+          <div>
+            <p className="text-xs uppercase tracking-widest text-amber-500 font-bold">Vendor Inventory</p>
+            <h1 className="text-3xl font-black text-slate-900 mt-1 flex items-center gap-2">
+              <Package className="w-8 h-8 text-[#D4AF37]" />
+              Marketplace Products Management
+            </h1>
+            <p className="text-sm text-slate-600 mt-1">
+              Add new sheesha blends, pipes, accessories and variations directly to your store inventory.
+            </p>
+          </div>
+
+          <div className="flex items-center gap-2">
+            <button
+              onClick={fetchProducts}
+              className="p-2.5 bg-white border border-slate-200 text-slate-600 rounded-xl hover:bg-slate-50 transition"
+              title="Refresh Products"
+            >
+              <RefreshCw size={18} />
+            </button>
+            <button
+              onClick={handleOpenAddModal}
+              className="px-5 py-2.5 bg-[#D4AF37] hover:bg-amber-500 text-slate-950 font-bold rounded-xl text-xs flex items-center gap-2 shadow-md transition"
+            >
+              <Plus size={18} /> Add New Product
             </button>
           </div>
+        </div>
 
-          <div className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
-            <DataTable
-              loadingIds={loadingIds}
-              columns={[
-                { header: 'SKU', accessor: 'id' },
-                { header: 'Product', accessor: 'name' },
-                { header: 'Price', accessor: 'price' },
-                { header: 'Stock', accessor: 'stock' },
-                { header: 'Status', render: (row) => <span className={`rounded-full px-3 py-1 text-xs font-semibold w-fit ${row.status === 'Active' ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-100 text-slate-700'}`}>{row.status}</span> },
-                {
-                  header: 'Actions',
-                  render: (row) => (
-                    <div className="flex gap-2 flex-wrap">
-                      <button
-                        onClick={() => handleAction(row.id, 'toggle-active', row.name)}
-                        disabled={loadingIds.has(row.id)}
-                        className={`rounded px-3 py-1 text-xs font-semibold transition disabled:opacity-50 ${
-                          row.status === 'Active'
-                            ? 'bg-yellow-100 text-yellow-600 hover:bg-yellow-200'
-                            : 'bg-green-100 text-green-600 hover:bg-green-200'
-                        }`}
-                      >
-                        {row.status === 'Active' ? 'Pause' : 'Activate'}
-                      </button>
-                      <button className="rounded px-3 py-1 bg-blue-100 text-blue-600 text-xs font-semibold hover:bg-blue-200 transition disabled:opacity-50 flex items-center gap-1">
-                        <Edit3 size={12} /> Edit
-                      </button>
-                      <button
-                        onClick={() => handleAction(row.id, 'delete', row.name)}
-                        disabled={loadingIds.has(row.id)}
-                        className="rounded px-3 py-1 bg-red-100 text-red-600 text-xs font-semibold hover:bg-red-200 transition disabled:opacity-50 flex items-center gap-1"
-                      >
-                        <Trash2 size={12} /> Delete
-                      </button>
-                    </div>
-                  ),
-                },
-              ]}
-              data={products}
+        {/* Search Bar */}
+        <div className="bg-white p-4 border border-slate-200 rounded-2xl shadow-xs flex items-center justify-between gap-4">
+          <div className="relative w-full sm:w-80">
+            <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+            <input
+              type="text"
+              placeholder="Search product title or SKU..."
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              className="w-full pl-9 pr-4 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs focus:ring-2 focus:ring-[#D4AF37]"
             />
           </div>
+          <div className="text-xs font-bold text-slate-600">
+            Active Catalog Items: <span className="text-slate-900 font-black">{filteredProducts.length}</span>
+          </div>
         </div>
-      </main>
 
-      <ActionModal
-        isOpen={actionModal.isOpen}
-        onClose={() => setActionModal({ isOpen: false, type: '', productId: '', productName: '' })}
-        title={`${actionModal.type === 'toggle-active' ? 'Toggle' : actionModal.type.charAt(0).toUpperCase() + actionModal.type.slice(1)} Product`}
-        message={
-          actionModal.type === 'toggle-active'
-            ? `Are you sure you want to toggle this product's status?`
-            : `Are you sure you want to ${actionModal.type} this product?`
-        }
-        actionType={actionModal.type}
-        itemName={actionModal.productName}
-        isDangerous={actionModal.type === 'delete'}
-        onConfirm={confirmAction}
-      />
+        {/* Products Table */}
+        <div className="bg-white border border-slate-200 rounded-2xl p-6 shadow-xs">
+          <div className="overflow-x-auto">
+            <table className="w-full text-left border-collapse text-xs">
+              <thead>
+                <tr className="border-b border-slate-200 text-slate-400 font-bold uppercase tracking-wider">
+                  <th className="py-3 px-3">Product Name</th>
+                  <th className="py-3 px-3">SKU</th>
+                  <th className="py-3 px-3">Category</th>
+                  <th className="py-3 px-3">Price</th>
+                  <th className="py-3 px-3">Stock</th>
+                  <th className="py-3 px-3">Status</th>
+                  <th className="py-3 px-3 text-right">Actions</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100">
+                {loading ? (
+                  <tr>
+                    <td colSpan={7} className="py-8 text-center text-slate-400">
+                      Loading products...
+                    </td>
+                  </tr>
+                ) : filteredProducts.length > 0 ? (
+                  filteredProducts.map((product) => (
+                    <tr key={product.id} className="hover:bg-slate-50 transition">
+                      <td className="py-3 px-3 font-bold text-slate-900">{product.title}</td>
+                      <td className="py-3 px-3 font-mono text-slate-500">{product.sku || 'N/A'}</td>
+                      <td className="py-3 px-3 text-slate-600 font-semibold">{product.type}</td>
+                      <td className="py-3 px-3 font-bold text-slate-900">AED {product.price}</td>
+                      <td className="py-3 px-3 text-slate-700">{product.stock} units</td>
+                      <td className="py-3 px-3">
+                        <span className={`px-2.5 py-1 rounded-full text-[10px] font-bold inline-flex items-center gap-1 ${
+                          product.isActive !== false ? 'bg-emerald-100 text-emerald-800' : 'bg-slate-100 text-slate-600'
+                        }`}>
+                          {product.isActive !== false ? <CheckCircle2 size={12} /> : <XCircle size={12} />}
+                          {product.isActive !== false ? 'Active' : 'Inactive'}
+                        </span>
+                      </td>
+                      <td className="py-3 px-3 text-right">
+                        <div className="flex items-center justify-end gap-2">
+                          <button
+                            onClick={() => handleOpenEditModal(product)}
+                            className="p-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg transition"
+                          >
+                            <Edit2 size={14} />
+                          </button>
+                          <button
+                            onClick={() => handleDeleteProduct(product.id)}
+                            className="p-1.5 bg-rose-50 hover:bg-rose-100 text-rose-600 rounded-lg transition"
+                          >
+                            <Trash2 size={14} />
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  ))
+                ) : (
+                  <tr>
+                    <td colSpan={7} className="py-8 text-center text-slate-400">
+                      No products found. Click "Add New Product" to create your first product.
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+        </div>
 
-      <Toast open={toastOpen} message={toastMessage} variant={toastType} onClose={() => setToastOpen(false)} />
-    </>
-  );
-}
+        {/* Add Modal */}
+        {showAddModal && (
+          <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-xs flex items-center justify-center p-4 z-50 overflow-y-auto">
+            <div className="bg-white rounded-2xl p-6 max-w-lg w-full shadow-2xl space-y-4 my-8">
+              <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+                <h3 className="text-lg font-bold text-slate-900 flex items-center gap-2">
+                  <Plus className="w-5 h-5 text-[#D4AF37]" />
+                  Add New Product to Inventory
+                </h3>
+                <button onClick={() => setShowAddModal(false)} className="text-slate-400 hover:text-slate-600">
+                  <X size={18} />
+                </button>
+              </div>
+
+              <form onSubmit={handleCreateProduct} className="space-y-4">
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1">Product Title *</label>
+                  <input
+                    type="text"
+                    value={title}
+                    onChange={(e) => setTitle(e.target.value)}
+                    placeholder="e.g. Double Apple Special Blend"
+                    className="w-full px-3 py-2 border border-slate-200 rounded-xl text-xs focus:ring-2 focus:ring-[#D4AF37]"
+                    required
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1">Description / Variations</label>
+                  <textarea
+                    rows={3}
+                    value={description}
+                    onChange={(e) => setDescription(e.target.value)}
+                    placeholder="Flavor description, ingredients, origin..."
+                    className="w-full px-3 py-2 border border-slate-200 rounded-xl text-xs focus:ring-2 focus:ring-[#D4AF37]"
+                  />
+                </div>
+
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-xs font-bold text-slate-700 mb-1">Price (AED) *</label>
+                    <input
+                      type="number"
+                      step="0.01"
+                      value={price}
+                      onChange={(e) => setPrice(e.target.value)}
+                      placeholder="120.00"
+                      className="w-full px-3 py-2 border border-slate-200 rounded-xl text-xs focus:ring-2 focus:ring-[#D4AF37]"
+                      required
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-bold text-slate-700 mb-1">Stock Units *</label>
+                    <input
+                      type="number"
+                      value={stock}
+                      onChange={(e) => setStock(e.target.value)}
+                      placeholder="10"
+                      className="w-full px-3 py-2 border border-slate-200 rounded-xl text-xs focus:ring-2 focus:ring-[#D4AF37]"
+                      required
+                    />
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-xs font-bold text-slate-700 mb-1">Category / Type</label>
+                    <select
+                      value={type}
+                      onChange={(e) => setType(e.target.value)}
+                      className="w-full px-3 py-2 border border-slate-200 rounded-xl text-xs focus:ring-2 focus:ring-[#D4AF37]"
+                    >
+                      <option value="TOBACCO_BLEND">Tobacco Blend</option>
+                      <option value="SHEESHA_PIPE">Sheesha Pipe</option>
+                      <option value="ACCESSORY">Accessory</option>
+                      <option value="RENTAL_PACKAGE">Rental Package</option>
+                      <option value="EQUIPMENT">Equipment</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-xs font-bold text-slate-700 mb-1">SKU</label>
+                    <input
+                      type="text"
+                      value={sku}
+                      onChange={(e) => setSku(e.target.value)}
+                      className="w-full px-3 py-2 border border-slate-200 rounded-xl text-xs focus:ring-2 focus:ring-[#D4AF37]"
+                    />
+                  </div>
+                </div>
+
+                <ImageUploader value={imageUrl} onChange={setImageUrl} label="Product Image (Upload File or URL)" />
+
+                <div className="flex justify-end gap-2 pt-3 border-t border-slate-100">
+                  <button
+                    type="button"
+                    onClick={() => setShowAddModal(false)}
+                    className="px-4 py-2 bg-slate-100 text-slate-700 font-bold rounded-xl text-xs hover:bg-slate-200"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    className="px-5 py-2 bg-[#D4AF37] text-slate-950 font-bold rounded-xl text-xs hover:bg-amber-500 shadow-md"
+                  >
+                    Save & Publish Product
+                  </button>
+                </div>
+              </form>
+            </div>
+          </div>
+        )}
+
+        {/* Edit Modal */}
+        {editingProduct && (
+          <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-xs flex items-center justify-center p-4 z-50 overflow-y-auto">
+            <div className="bg-white rounded-2xl p-6 max-w-lg w-full shadow-2xl space-y-4 my-8">
+              <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+                <h3 className="text-lg font-bold text-slate-900 flex items-center gap-2">
+                  <Edit2 className="w-5 h-5 text-[#D4AF37]" />
+                  Edit Product: {editingProduct.title}
+                </h3>
+                <button onClick={() => setEditingProduct(null)} className="text-slate-400 hover:text-slate-600">
+                  <X size={18} />
+                </button>
+              </div>
+
+              <form onSubmit={handleSaveEditProduct} className="space-y-4">
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1">Title</label>
+                  <input
+                    type="text"
+                    value={title}
+                    onChange={(e) => setTitle(e.target.value)}
+                    className="w-full px-3 py-2 border border-slate-200 rounded-xl text-xs focus:ring-2 focus:ring-[#D4AF37]"
+                    required
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1">Description</label>
+                  <textarea
+                    rows={3}
+                    value={description}
+                    onChange={(e) => setDescription(e.target.value)}
+                    className="w-full px-3 py-2 border border-slate-200 rounded-xl text-xs focus:ring-2 focus:ring-[#D4AF37]"
+                  />
+                </div>
+
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-xs font-bold text-slate-700 mb-1">Price (AED)</label>
+                    <input
+                      type="number"
+                      step="0.01"
+                      value={price}
+                      onChange={(e) => setPrice(e.target.value)}
+                      className="w-full px-3 py-2 border border-slate-200 rounded-xl text-xs focus:ring-2 focus:ring-[#D4AF37]"
+                      required
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-bold text-slate-700 mb-1">Stock Units</label>
+                    <input
+                      type="number"
+                      value={stock}
+                      onChange={(e) => setStock(e.target.value)}
+                      className="w-full px-3 py-2 border border-slate-200 rounded-xl text-xs focus:ring-2 focus:ring-[#D4AF37]"
+                      required
+                    />
+                  </div>
+                </div>
+
+                <ImageUploader value={imageUrl} onChange={setImageUrl} label="Product Image (Upload File or URL)" />
+
+                <div className="flex justify-end gap-2 pt-3 border-t border-slate-100">
+                  <button
+                    type="button"
+                    onClick={() => setEditingProduct(null)}
+                    className="px-4 py-2 bg-slate-100 text-slate-700 font-bold rounded-xl text-xs hover:bg-slate-200"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    className="px-5 py-2 bg-[#D4AF37] text-slate-950 font-bold rounded-xl text-xs hover:bg-amber-500 shadow-md"
+                  >
+                    Update Product
+                  </button>
+                </div>
+              </form>
+            </div>
+          </div>
+        )}
+
+        <Toast open={toastOpen} message={toastMessage} variant={toastType} onClose={() => setToastOpen(false)} />
+      </div>
+    );
+  }

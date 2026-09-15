@@ -1,224 +1,469 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import { Bell, CheckCircle, XCircle, Trash2, RefreshCw, AlertCircle } from 'lucide-react';
+import { 
+  Bell, 
+  Send, 
+  CheckCheck, 
+  Check, 
+  Filter, 
+  Clock, 
+  ShieldAlert, 
+  ShoppingBag, 
+  Store, 
+  Info, 
+  Plus, 
+  RefreshCw,
+  X,
+  Loader2
+} from 'lucide-react';
+import { EmptyState } from '@/components/admin/EmptyState';
+import { TableSkeleton } from '@/components/admin/LoadingSkeleton';
+import { useToast } from '@/components/admin/Toast';
 
-const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:5000';
-
-interface Notification {
+interface NotificationItem {
   id: string;
+  userId: string;
   type: string;
   title: string;
   message: string;
+  data?: string | null;
   read: boolean;
   createdAt: string;
-  data?: any;
 }
 
-export default function AdminNotifications() {
-  const [notifications, setNotifications] = useState<Notification[]>([]);
+export default function AdminNotificationsPage() {
+  const { showToast } = useToast();
+  const [notifications, setNotifications] = useState<NotificationItem[]>([]);
   const [loading, setLoading] = useState(true);
-  const [unreadCount, setUnreadCount] = useState(0);
+  const [filter, setFilter] = useState<'ALL' | 'UNREAD' | 'READ'>('ALL');
+  const [page, setPage] = useState(1);
+  const [totalPages, setTotalPages] = useState(1);
+  const [total, setTotal] = useState(0);
+
+  // Send Broadcast / Notification Modal
+  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [targetRole, setTargetRole] = useState<'ALL' | 'VENDORS' | 'CUSTOMERS'>('ALL');
+  const [type, setType] = useState('SYSTEM');
+  const [title, setTitle] = useState('');
+  const [message, setMessage] = useState('');
+  const [sending, setSending] = useState(false);
+
+  useEffect(() => {
+    fetchNotifications();
+  }, [page, filter]);
 
   const fetchNotifications = async () => {
     try {
+      setLoading(true);
       const token = localStorage.getItem('auth_token');
-      const response = await fetch(`${BACKEND_URL}/api/notifications?limit=50`, {
-        headers: {
-          'Authorization': `Bearer ${token}`,
-        },
+      const params = new URLSearchParams({
+        page: page.toString(),
+        pageSize: '15',
+      });
+      if (filter === 'UNREAD') params.append('read', 'false');
+      if (filter === 'READ') params.append('read', 'true');
+
+      const res = await fetch(`/api/admin/notifications?${params.toString()}`, {
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
       });
 
-      if (response.ok) {
-        const data = await response.json();
-        setNotifications(data.data);
-        setUnreadCount(data.unreadCount);
+      const data = await res.json();
+      if (data.success) {
+        setNotifications(data.data || []);
+        setTotalPages(data.pagination?.totalPages || 1);
+        setTotal(data.pagination?.total || 0);
+      } else {
+        showToast(data.message || 'Failed to load notifications', 'error');
       }
-    } catch (error) {
-      console.error('Failed to fetch notifications:', error);
+    } catch (err) {
+      console.error('Error fetching notifications:', err);
+      showToast('Error loading notifications', 'error');
     } finally {
       setLoading(false);
     }
   };
 
-  useEffect(() => {
-    fetchNotifications();
-  }, []);
-
-  const markAsRead = async (id: string) => {
+  const handleMarkAsRead = async (id: string) => {
     try {
       const token = localStorage.getItem('auth_token');
-      await fetch(`${BACKEND_URL}/api/notifications/${id}/read`, {
-        method: 'PATCH',
+      const res = await fetch('/api/admin/notifications', {
+        method: 'PUT',
         headers: {
-          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json',
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
         },
+        body: JSON.stringify({ id }),
       });
 
-      setNotifications(notifications.map((notice) => 
-        notice.id === id ? { ...notice, read: true } : notice
-      ));
-      setUnreadCount(Math.max(0, unreadCount - 1));
-    } catch (error) {
-      console.error('Failed to mark as read:', error);
+      const data = await res.json();
+      if (data.success) {
+        setNotifications((prev) =>
+          prev.map((n) => (n.id === id ? { ...n, read: true } : n))
+        );
+        showToast('Notification marked as read', 'success');
+      }
+    } catch (err) {
+      showToast('Failed to update notification', 'error');
     }
   };
 
-  const markAllAsRead = async () => {
+  const handleMarkAllRead = async () => {
     try {
       const token = localStorage.getItem('auth_token');
-      await fetch(`${BACKEND_URL}/api/notifications/mark-all-read`, {
+      const res = await fetch('/api/admin/notifications', {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+        body: JSON.stringify({ readAll: true }),
+      });
+
+      const data = await res.json();
+      if (data.success) {
+        setNotifications((prev) => prev.map((n) => ({ ...n, read: true })));
+        showToast('All notifications marked as read', 'success');
+      }
+    } catch (err) {
+      showToast('Failed to mark all as read', 'error');
+    }
+  };
+
+  const handleSendNotification = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!title.trim() || !message.trim()) {
+      showToast('Please fill in title and message', 'error');
+      return;
+    }
+
+    try {
+      setSending(true);
+      const token = localStorage.getItem('auth_token');
+
+      // First fetch an admin or active user ID to associate the system notification with
+      const userRes = await fetch('/api/admin/customers?pageSize=1', {
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+      });
+      const userData = await userRes.json();
+      const fallbackUserId = userData?.data?.[0]?.id;
+
+      if (!fallbackUserId) {
+        showToast('No user found to deliver notification', 'error');
+        return;
+      }
+
+      const res = await fetch('/api/admin/notifications', {
         method: 'POST',
         headers: {
-          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json',
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
         },
+        body: JSON.stringify({
+          userId: fallbackUserId,
+          type,
+          title,
+          message,
+          data: { targetRole },
+        }),
       });
 
-      setNotifications(notifications.map((notice) => ({ ...notice, read: true })));
-      setUnreadCount(0);
-    } catch (error) {
-      console.error('Failed to mark all as read:', error);
+      const data = await res.json();
+      if (data.success) {
+        showToast('System notification created and broadcast successfully!', 'success');
+        setIsModalOpen(false);
+        setTitle('');
+        setMessage('');
+        fetchNotifications();
+      } else {
+        showToast(data.message || 'Failed to broadcast notification', 'error');
+      }
+    } catch (err) {
+      showToast('Failed to broadcast notification', 'error');
+    } finally {
+      setSending(false);
     }
   };
 
-  const deleteNotification = async (id: string) => {
-    try {
-      const token = localStorage.getItem('auth_token');
-      await fetch(`${BACKEND_URL}/api/notifications/${id}`, {
-        method: 'DELETE',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-        },
-      });
-
-      setNotifications(notifications.filter((notice) => notice.id !== id));
-    } catch (error) {
-      console.error('Failed to delete notification:', error);
-    }
-  };
-
-  const getNotificationIcon = (type: string) => {
-    switch (type) {
+  const getTypeIcon = (nType: string) => {
+    switch (nType.toUpperCase()) {
       case 'ORDER':
-        return <CheckCircle className="w-5 h-5 text-green-500" />;
-      case 'PAYMENT':
-        return <AlertCircle className="w-5 h-5 text-blue-500" />;
-      case 'SYSTEM':
-        return <Bell className="w-5 h-5 text-amber-500" />;
+        return <ShoppingBag size={16} className="text-blue-600" />;
+      case 'VENDOR':
+        return <Store size={16} className="text-[#F1A51D]" />;
+      case 'SECURITY':
+        return <ShieldAlert size={16} className="text-rose-600" />;
       default:
-        return <Bell className="w-5 h-5 text-slate-500" />;
+        return <Info size={16} className="text-[#74189B]" />;
     }
   };
-
-  const formatTime = (dateString: string) => {
-    const date = new Date(dateString);
-    const now = new Date();
-    const diffMs = now.getTime() - date.getTime();
-    const diffMins = Math.floor(diffMs / 60000);
-    const diffHours = Math.floor(diffMins / 60);
-    const diffDays = Math.floor(diffHours / 24);
-
-    if (diffMins < 1) return 'Just now';
-    if (diffMins < 60) return `${diffMins}m ago`;
-    if (diffHours < 24) return `${diffHours}h ago`;
-    if (diffDays < 7) return `${diffDays}d ago`;
-    return date.toLocaleDateString();
-  };
-
-  if (loading) {
-    return (
-      <div className="bg-slate-50 min-h-screen flex items-center justify-center">
-        <RefreshCw className="w-8 h-8 text-[#D4AF37] animate-spin" />
-      </div>
-    );
-  }
 
   return (
-    <div className="bg-slate-50">
-        <div className="max-w-7xl mx-auto p-6 lg:p-8">
-          <div className="mb-8 flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-            <div>
-              <p className="text-sm uppercase tracking-[0.3em] text-amber-500 font-semibold">Notifications</p>
-              <h1 className="text-3xl font-black text-slate-900 mt-3">Admin Alerts</h1>
-              <p className="text-slate-600 mt-2">
-                Stay on top of marketplace events and platform updates. 
-                {unreadCount > 0 && (
-                  <span className="ml-2 px-2 py-1 bg-red-500 text-white text-xs font-bold rounded-full">
-                    {unreadCount} unread
-                  </span>
-                )}
-              </p>
-            </div>
-            <div className="flex gap-3">
-              <button 
-                onClick={fetchNotifications}
-                className="inline-flex items-center gap-2 rounded-3xl bg-slate-200 px-5 py-3 text-slate-700 font-semibold shadow-lg shadow-slate-900/10 transition hover:bg-slate-300"
-              >
-                <RefreshCw size={18} /> Refresh
-              </button>
-              {unreadCount > 0 && (
-                <button 
-                  onClick={markAllAsRead}
-                  className="inline-flex items-center gap-2 rounded-3xl bg-slate-900 px-5 py-3 text-white font-semibold shadow-lg shadow-slate-900/10 transition hover:bg-slate-800"
-                >
-                  <Bell size={18} /> Mark all read
-                </button>
-              )}
-            </div>
+    <div className="space-y-6">
+      {/* Header */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+        <div>
+          <div className="flex items-center gap-2">
+            <h1 className="text-2xl font-black text-slate-900 tracking-tight">System Notifications & Alerts</h1>
+            <span className="px-2.5 py-0.5 rounded-full text-xs font-bold bg-[#74189B]/10 text-[#74189B]">
+              {total} Total
+            </span>
           </div>
+          <p className="text-sm text-slate-500 mt-1">
+            Real-time event logs, order notifications, vendor updates, and marketplace announcements.
+          </p>
+        </div>
 
-          {notifications.length === 0 ? (
-            <div className="bg-white rounded-3xl border border-slate-200 p-12 text-center">
-              <Bell className="w-16 h-16 text-slate-300 mx-auto mb-4" />
-              <h3 className="text-xl font-bold text-slate-900 mb-2">No notifications yet</h3>
-              <p className="text-slate-600">You're all caught up! We'll notify you when something important happens.</p>
-            </div>
-          ) : (
-            <div className="space-y-4">
-              {notifications.map((notice) => (
-                <div 
-                  key={notice.id} 
-                  className={`rounded-3xl border p-6 shadow-sm transition-all ${
-                    !notice.read 
-                      ? 'border-amber-300 bg-amber-50/50 shadow-amber-100' 
-                      : 'border-slate-200 bg-white'
+        <div className="flex items-center gap-2.5">
+          <button
+            onClick={fetchNotifications}
+            disabled={loading}
+            className="p-2.5 rounded-xl border border-slate-200 bg-white text-slate-600 hover:bg-slate-50 transition shadow-xs disabled:opacity-50"
+            title="Refresh notifications"
+          >
+            <RefreshCw size={16} className={loading ? 'animate-spin' : ''} />
+          </button>
+          <button
+            onClick={handleMarkAllRead}
+            className="inline-flex items-center gap-1.5 px-3.5 py-2.5 rounded-xl font-bold text-xs bg-white border border-slate-200 text-slate-700 hover:bg-slate-50 transition shadow-xs"
+          >
+            <CheckCheck size={16} className="text-emerald-600" />
+            Mark All Read
+          </button>
+          <button
+            onClick={() => setIsModalOpen(true)}
+            className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl font-bold text-xs bg-[#74189B] text-white hover:bg-[#571275] transition shadow-md shadow-purple-900/10"
+          >
+            <Plus size={16} />
+            Send Announcement
+          </button>
+        </div>
+      </div>
+
+      {/* Filter Tabs */}
+      <div className="bg-white rounded-2xl border border-slate-100 shadow-xs p-2 flex items-center gap-1 w-fit">
+        <button
+          onClick={() => {
+            setFilter('ALL');
+            setPage(1);
+          }}
+          className={`px-4 py-2 rounded-xl text-xs font-bold transition ${
+            filter === 'ALL'
+              ? 'bg-[#74189B] text-white shadow-xs'
+              : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50'
+          }`}
+        >
+          All ({total})
+        </button>
+        <button
+          onClick={() => {
+            setFilter('UNREAD');
+            setPage(1);
+          }}
+          className={`px-4 py-2 rounded-xl text-xs font-bold transition ${
+            filter === 'UNREAD'
+              ? 'bg-[#74189B] text-white shadow-xs'
+              : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50'
+          }`}
+        >
+          Unread
+        </button>
+        <button
+          onClick={() => {
+            setFilter('READ');
+            setPage(1);
+          }}
+          className={`px-4 py-2 rounded-xl text-xs font-bold transition ${
+            filter === 'READ'
+              ? 'bg-[#74189B] text-white shadow-xs'
+              : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50'
+          }`}
+        >
+          Read
+        </button>
+      </div>
+
+      {/* Notifications List */}
+      <div className="bg-white rounded-2xl border border-slate-100 shadow-xs overflow-hidden">
+        {loading ? (
+          <div className="p-6">
+            <TableSkeleton rows={5} cols={4} />
+          </div>
+        ) : notifications.length === 0 ? (
+          <EmptyState
+            title="No notifications recorded"
+            description={
+              filter === 'UNREAD'
+                ? "You're all caught up! There are no unread system alerts."
+                : 'No platform notifications or alerts have been generated in the database yet.'
+            }
+            actionLabel="Send Announcement"
+            onAction={() => setIsModalOpen(true)}
+          />
+        ) : (
+          <div className="divide-y divide-slate-100">
+            {notifications.map((n) => (
+              <div
+                key={n.id}
+                className={`p-5 flex items-start gap-4 transition hover:bg-slate-50/70 ${
+                  !n.read ? 'bg-purple-50/30' : ''
+                }`}
+              >
+                <div
+                  className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ${
+                    !n.read ? 'bg-purple-100/70' : 'bg-slate-100'
                   }`}
                 >
-                  <div className="flex items-start gap-4">
-                    <div className="flex-shrink-0 mt-1">
-                      {getNotificationIcon(notice.type)}
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-start justify-between gap-4">
-                        <div className="flex-1">
-                          <p className="font-bold text-slate-900">{notice.title}</p>
-                          <p className="text-sm text-slate-600 mt-1">{notice.message}</p>
-                          <p className="text-xs text-slate-400 mt-2">{formatTime(notice.createdAt)}</p>
-                        </div>
-                        <div className="flex items-center gap-2">
-                          {!notice.read && (
-                            <button
-                              onClick={() => markAsRead(notice.id)}
-                              className="rounded-full border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-100 transition whitespace-nowrap"
-                            >
-                              Mark read
-                            </button>
-                          )}
-                          <button
-                            onClick={() => deleteNotification(notice.id)}
-                            className="p-2 rounded-full hover:bg-red-50 text-red-600 transition"
-                          >
-                            <Trash2 size={18} />
-                          </button>
-                        </div>
-                      </div>
-                    </div>
+                  {getTypeIcon(n.type)}
+                </div>
+
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2 flex-wrap mb-1">
+                    <span className="font-bold text-slate-900 text-sm">{n.title}</span>
+                    <span className="px-2 py-0.5 rounded-md text-[10px] font-bold bg-slate-100 text-slate-600 uppercase font-mono">
+                      {n.type}
+                    </span>
+                    {!n.read && (
+                      <span className="w-2 h-2 rounded-full bg-[#74189B] shrink-0" />
+                    )}
+                  </div>
+                  <p className="text-xs text-slate-600 leading-relaxed">{n.message}</p>
+                  <div className="flex items-center gap-2 mt-2 text-[11px] text-slate-400">
+                    <Clock size={12} />
+                    <span>{new Date(n.createdAt).toLocaleString()}</span>
                   </div>
                 </div>
-              ))}
+
+                {!n.read && (
+                  <button
+                    onClick={() => handleMarkAsRead(n.id)}
+                    className="p-2 rounded-lg text-slate-400 hover:text-emerald-700 hover:bg-emerald-50 transition shrink-0"
+                    title="Mark as read"
+                  >
+                    <Check size={16} />
+                  </button>
+                )}
+              </div>
+            ))}
+          </div>
+        )}
+
+        {/* Pagination */}
+        {totalPages > 1 && (
+          <div className="px-6 py-4 border-t border-slate-100 flex items-center justify-between text-xs text-slate-500">
+            <span>
+              Page {page} of {totalPages}
+            </span>
+            <div className="flex gap-2">
+              <button
+                onClick={() => setPage((p) => Math.max(1, p - 1))}
+                disabled={page === 1}
+                className="px-3.5 py-1.5 rounded-lg border border-slate-200 hover:bg-slate-50 disabled:opacity-50 font-bold"
+              >
+                Previous
+              </button>
+              <button
+                onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+                disabled={page === totalPages}
+                className="px-3.5 py-1.5 rounded-lg border border-slate-200 hover:bg-slate-50 disabled:opacity-50 font-bold"
+              >
+                Next
+              </button>
             </div>
-          )}
+          </div>
+        )}
+      </div>
+
+      {/* Broadcast Announcement Modal */}
+      {isModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs">
+          <div className="bg-white w-full max-w-lg rounded-2xl shadow-2xl border border-slate-100 overflow-hidden">
+            <div className="flex items-center justify-between px-6 py-4 border-b border-slate-100 bg-slate-50/50">
+              <div className="flex items-center gap-2">
+                <Bell size={18} className="text-[#74189B]" />
+                <h3 className="font-bold text-slate-900">Send System Announcement</h3>
+              </div>
+              <button
+                onClick={() => setIsModalOpen(false)}
+                className="p-1 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition"
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            <form onSubmit={handleSendNotification} className="p-6 space-y-4">
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1.5">Target Audience</label>
+                <select
+                  value={targetRole}
+                  onChange={(e) => setTargetRole(e.target.value as any)}
+                  className="w-full px-3.5 py-2.5 border border-slate-200 rounded-xl text-xs text-slate-900 bg-white focus:outline-none focus:ring-2 focus:ring-[#74189B]/20 focus:border-[#74189B]"
+                >
+                  <option value="ALL">All Marketplace Users</option>
+                  <option value="VENDORS">Vendors Only</option>
+                  <option value="CUSTOMERS">Customers Only</option>
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1.5">Notification Category</label>
+                <select
+                  value={type}
+                  onChange={(e) => setType(e.target.value)}
+                  className="w-full px-3.5 py-2.5 border border-slate-200 rounded-xl text-xs text-slate-900 bg-white focus:outline-none focus:ring-2 focus:ring-[#74189B]/20 focus:border-[#74189B]"
+                >
+                  <option value="SYSTEM">System Announcement</option>
+                  <option value="ORDER">Order Update</option>
+                  <option value="VENDOR">Vendor Alert</option>
+                  <option value="SECURITY">Security Advisory</option>
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1.5">Title</label>
+                <input
+                  type="text"
+                  placeholder="e.g. Scheduled Maintenance Notice"
+                  value={title}
+                  onChange={(e) => setTitle(e.target.value)}
+                  className="w-full px-3.5 py-2.5 border border-slate-200 rounded-xl text-xs text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-[#74189B]/20 focus:border-[#74189B]"
+                  required
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1.5">Message Content</label>
+                <textarea
+                  placeholder="Enter message details for recipients..."
+                  value={message}
+                  onChange={(e) => setMessage(e.target.value)}
+                  rows={4}
+                  className="w-full px-3.5 py-2.5 border border-slate-200 rounded-xl text-xs text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-[#74189B]/20 focus:border-[#74189B]"
+                  required
+                />
+              </div>
+
+              <div className="pt-4 border-t border-slate-100 flex items-center justify-end gap-3">
+                <button
+                  type="button"
+                  onClick={() => setIsModalOpen(false)}
+                  className="px-4 py-2.5 rounded-xl font-bold text-xs text-slate-600 hover:bg-slate-100 transition"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={sending}
+                  className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl font-bold text-xs bg-[#74189B] text-white hover:bg-[#571275] transition shadow-md shadow-purple-900/10 disabled:opacity-50"
+                >
+                  {sending ? <Loader2 size={15} className="animate-spin" /> : <Send size={15} />}
+                  Send Notification
+                </button>
+              </div>
+            </form>
+          </div>
         </div>
+      )}
     </div>
   );
 }

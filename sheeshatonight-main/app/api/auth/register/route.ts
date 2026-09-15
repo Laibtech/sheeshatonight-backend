@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { prisma } from '@/lib/db';
+import { prisma } from '@/lib/prisma';
 import { hashPassword, validateRegisterInput } from '@/lib/auth';
 import { generateToken } from '@/lib/jwt';
 import { setAuthCookie } from '@/lib/middleware';
@@ -11,10 +11,14 @@ import { setAuthCookie } from '@/lib/middleware';
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
-    const { name, email, password, confirmPassword, role } = body;
+    const { name, email, phone, password, confirmPassword, role = 'CUSTOMER' } = body;
+
+    const normalizedEmail = (email || '').trim().toLowerCase();
+    const trimmedName = (name || '').trim();
+    const normalizedPhone = (phone || '').trim() || null;
 
     // Validate input
-    const validation = validateRegisterInput({ name, email, password, confirmPassword });
+    const validation = validateRegisterInput({ name: trimmedName, email: normalizedEmail, password, confirmPassword });
     if (!validation.valid) {
       return NextResponse.json(
         { error: validation.error },
@@ -22,30 +26,42 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Check if user already exists
+    // Check if user email already exists
     const existingUser = await prisma.user.findUnique({
-      where: { email },
+      where: { email: normalizedEmail },
     });
 
     if (existingUser) {
       return NextResponse.json(
-        { error: 'Email already registered' },
+        { error: 'An account with this email address already exists.' },
         { status: 409 }
       );
+    }
+
+    // Check if phone already exists
+    if (normalizedPhone) {
+      const existingPhone = await prisma.user.findUnique({
+        where: { phone: normalizedPhone },
+      });
+      if (existingPhone) {
+        return NextResponse.json(
+          { error: 'An account with this phone number already exists.' },
+          { status: 409 }
+        );
+      }
     }
 
     // Hash password
     const hashedPassword = await hashPassword(password);
 
-    // Create user with role (default to CUSTOMER if not provided)
-    const userRole = role && ['CUSTOMER', 'VENDOR', 'ADMIN'].includes(role) ? role : 'CUSTOMER';
-
     const user = await prisma.user.create({
       data: {
-        name,
-        email,
+        name: trimmedName,
+        email: normalizedEmail,
+        phone: normalizedPhone,
         password: hashedPassword,
-        role: userRole as any,
+        role: role === 'VENDOR' ? 'VENDOR' : 'CUSTOMER',
+        status: 'ACTIVE',
       },
     });
 
@@ -56,7 +72,7 @@ export async function POST(request: NextRequest) {
       role: user.role,
     });
 
-    // Create response and set auth cookie
+    // Create response and set auth cookies
     const response = NextResponse.json(
       {
         success: true,
@@ -72,11 +88,24 @@ export async function POST(request: NextRequest) {
       { status: 201 }
     );
 
-    return setAuthCookie(token, response);
-  } catch (error) {
+    return setAuthCookie(token, response, user.role);
+  } catch (error: any) {
     console.error('Register error:', error);
+    if (error?.code === 'P2002') {
+      const target = String(error?.meta?.target || '');
+      if (target.includes('phone')) {
+        return NextResponse.json(
+          { error: 'This phone number is already registered to another account.' },
+          { status: 409 }
+        );
+      }
+      return NextResponse.json(
+        { error: 'An account with this email address already exists.' },
+        { status: 409 }
+      );
+    }
     return NextResponse.json(
-      { error: 'Registration failed' },
+      { error: 'Registration failed. Please try again.' },
       { status: 500 }
     );
   }

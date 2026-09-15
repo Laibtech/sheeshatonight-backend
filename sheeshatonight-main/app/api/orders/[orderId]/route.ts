@@ -4,6 +4,17 @@ import { verifyTokenAndGetUser } from '@/lib/auth';
 import { verifyToken } from '@/lib/jwt';
 import { prisma } from '@/lib/prisma';
 import { orderActionSchema } from '@/lib/validation';
+import { notifyOrderStatusChange, notifyLeaveReview } from '@/lib/notifications';
+
+function extractTokenFromReq(request: Request): string | null {
+  const authHeader = request.headers.get('authorization') || request.headers.get('Authorization');
+  if (authHeader?.startsWith('Bearer ')) {
+    return authHeader.substring(7);
+  }
+  const cookieHeader = request.headers.get('cookie');
+  const match = cookieHeader?.match(/(?:^|; )auth_token=([^;]*)/);
+  return match && match[1] ? decodeURIComponent(match[1]) : null;
+}
 
 /**
  * GET /api/orders/[orderId]
@@ -11,9 +22,7 @@ import { orderActionSchema } from '@/lib/validation';
  */
 export async function GET(request: Request, { params }: { params: { orderId: string } }) {
   try {
-    // Extract token from cookies
-    const cookieHeader = request.headers.get('cookie');
-    const token = cookieHeader?.split('; ').find(c => c.startsWith('auth_token='))?.split('=')[1];
+    const token = extractTokenFromReq(request);
 
     if (!token || !verifyToken(token)) {
       return errorResponse('Authentication required', 401);
@@ -80,9 +89,7 @@ export async function GET(request: Request, { params }: { params: { orderId: str
  */
 export async function POST(request: Request, { params }: { params: { orderId: string } }) {
   try {
-    // Extract token from cookies
-    const cookieHeader = request.headers.get('cookie');
-    const token = cookieHeader?.split('; ').find(c => c.startsWith('auth_token='))?.split('=')[1];
+    const token = extractTokenFromReq(request);
 
     if (!token || !verifyToken(token)) {
       return errorResponse('Authentication required', 401);
@@ -171,6 +178,17 @@ export async function POST(request: Request, { params }: { params: { orderId: st
       where: { id: orderId },
       data: updateData,
     });
+
+    // Send notification to customer about status change
+    await notifyOrderStatusChange(orderId, result.status);
+
+    // If delivered, also send review request after a delay
+    if (result.status === 'DELIVERED' || result.status === 'COMPLETED') {
+      // In production, this would be a scheduled job
+      setTimeout(() => {
+        notifyLeaveReview(orderId);
+      }, 24 * 60 * 60 * 1000); // 24 hours later
+    }
 
     return successResponse(result, `Order ${action}ed successfully`);
   } catch (error) {

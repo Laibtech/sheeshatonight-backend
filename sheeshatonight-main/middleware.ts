@@ -4,63 +4,27 @@ import type { NextRequest } from 'next/server';
 export function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
 
+  // Ignore API requests and static assets
+  if (pathname.startsWith('/api') || pathname.startsWith('/_next') || pathname.includes('.')) {
+    return NextResponse.next();
+  }
+
   // Get auth token and role from cookies
   const authToken = request.cookies.get('auth_token')?.value;
   const userRole = request.cookies.get('user_role')?.value;
 
-  // Public routes that don't need authentication
-  const publicRoutes = ['/auth/login', '/auth/signup', '/', '/about', '/contact'];
-  const isPublicRoute = publicRoutes.some(route => pathname.startsWith(route));
+  // Protected route prefixes that require authentication
+  const protectedPrefixes = ['/admin', '/vendor', '/dashboard', '/checkout'];
+  const isProtectedRoute = protectedPrefixes.some(prefix => pathname === prefix || pathname.startsWith(prefix + '/'));
 
-  // If not logged in and trying to access protected route
-  if (!authToken && !isPublicRoute) {
-    return NextResponse.redirect(new URL('/auth/login', request.url));
+  // If trying to access a protected route without auth token -> redirect to login
+  if (!authToken && isProtectedRoute) {
+    const loginUrl = new URL('/auth/login', request.url);
+    loginUrl.searchParams.set('redirect', pathname);
+    return NextResponse.redirect(loginUrl);
   }
 
-  // If logged in and trying to access auth pages, redirect to appropriate dashboard
-  if (authToken && (pathname.startsWith('/auth/login') || pathname.startsWith('/auth/signup'))) {
-    const roleRoutes: Record<string, string> = {
-      CUSTOMER: '/dashboard',
-      VENDOR: '/vendor',
-      ADMIN: '/admin',
-    };
-    const redirectPath = roleRoutes[userRole || 'CUSTOMER'] || '/dashboard';
-    return NextResponse.redirect(new URL(redirectPath, request.url));
-  }
-
-  // Role-based access control
-  if (authToken && userRole) {
-    // Admin routes
-    if (pathname.startsWith('/admin') && userRole !== 'ADMIN') {
-      const roleRoutes: Record<string, string> = {
-        CUSTOMER: '/dashboard',
-        VENDOR: '/vendor',
-      };
-      const redirectPath = roleRoutes[userRole] || '/dashboard';
-      return NextResponse.redirect(new URL(redirectPath, request.url));
-    }
-
-    // Vendor routes
-    if (pathname.startsWith('/vendor') && userRole !== 'VENDOR') {
-      const roleRoutes: Record<string, string> = {
-        CUSTOMER: '/dashboard',
-        ADMIN: '/admin',
-      };
-      const redirectPath = roleRoutes[userRole] || '/dashboard';
-      return NextResponse.redirect(new URL(redirectPath, request.url));
-    }
-
-    // Customer routes
-    if (pathname.startsWith('/dashboard') && userRole !== 'CUSTOMER') {
-      const roleRoutes: Record<string, string> = {
-        VENDOR: '/vendor',
-        ADMIN: '/admin',
-      };
-      const redirectPath = roleRoutes[userRole] || '/dashboard';
-      return NextResponse.redirect(new URL(redirectPath, request.url));
-    }
-  }
-
+  // ProtectedRoute component handles authoritative database role verification via /api/auth/me
   return NextResponse.next();
 }
 

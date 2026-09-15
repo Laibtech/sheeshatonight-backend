@@ -1,15 +1,18 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { Mail, Lock, User, Phone, MapPin, Loader2, Eye, EyeOff, Store } from 'lucide-react';
+import { Mail, Lock, User, Phone, MapPin, Loader2, Eye, EyeOff, Store, CheckCircle2, UserCheck } from 'lucide-react';
+import { useAuthStore } from '@/lib/store';
+import { setSessionCookie } from '@/lib/session';
+import Header from '@/components/Header';
+import Footer from '@/components/Footer';
 
-const NEXT_PUBLIC_API_URL = process.env.NEXT_PUBLIC_API_URL;
-const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL || NEXT_PUBLIC_API_URL?.replace(/\/api\/?$/, '') || 'http://localhost:5000';
-
-export default function SignupPage() {
+function SignupContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
+  const { setLoggedIn, setUserRole, setUserData } = useAuthStore();
+
   const [formData, setFormData] = useState({
     firstName: '',
     lastName: '',
@@ -19,9 +22,10 @@ export default function SignupPage() {
     confirmPassword: '',
     role: 'CUSTOMER',
     region: 'Dubai, UAE',
-    businessName: '', // For vendors
-    businessType: '', // For vendors
+    businessName: '',
+    businessType: '',
   });
+
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -30,14 +34,16 @@ export default function SignupPage() {
 
   useEffect(() => {
     const role = searchParams?.get('role');
-    if (role === 'vendor') {
-      setFormData(prev => ({ ...prev, role: 'VENDOR' }));
-    } else if (role === 'customer') {
-      setFormData(prev => ({ ...prev, role: 'CUSTOMER' }));
+    if (role === 'vendor' || role === 'VENDOR') {
+      setFormData((prev) => ({ ...prev, role: 'VENDOR' }));
+    } else if (role === 'customer' || role === 'CUSTOMER') {
+      setFormData((prev) => ({ ...prev, role: 'CUSTOMER' }));
     }
   }, [searchParams]);
 
-  const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
+  const handleChange = (
+    e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>
+  ) => {
     setFormData({
       ...formData,
       [e.target.name]: e.target.value,
@@ -45,33 +51,33 @@ export default function SignupPage() {
   };
 
   const validateForm = () => {
-    if (!formData.firstName || formData.firstName.length < 2) {
-      setError('First name must be at least 2 characters');
+    if (!formData.firstName || formData.firstName.trim().length < 2) {
+      setError('First name must be at least 2 characters.');
       return false;
     }
-    if (!formData.lastName || formData.lastName.length < 2) {
-      setError('Last name must be at least 2 characters');
+    if (!formData.lastName || formData.lastName.trim().length < 2) {
+      setError('Last name must be at least 2 characters.');
       return false;
     }
     if (!formData.email || !/\S+@\S+\.\S+/.test(formData.email)) {
-      setError('Please enter a valid email address');
+      setError('Please enter a valid email address.');
       return false;
     }
     if (!formData.password || formData.password.length < 8) {
-      setError('Password must be at least 8 characters');
+      setError('Password must be at least 8 characters.');
       return false;
     }
     if (formData.password !== formData.confirmPassword) {
-      setError('Passwords do not match');
+      setError('Passwords do not match.');
       return false;
     }
     if (formData.role === 'VENDOR') {
-      if (!formData.businessName || formData.businessName.length < 2) {
-        setError('Business name is required for vendors');
+      if (!formData.businessName || formData.businessName.trim().length < 2) {
+        setError('Business name is required for vendor registration.');
         return false;
       }
       if (!formData.businessType) {
-        setError('Business type is required for vendors');
+        setError('Please select your business type.');
         return false;
       }
     }
@@ -90,321 +96,426 @@ export default function SignupPage() {
     setLoading(true);
 
     try {
-      const response = await fetch(`${BACKEND_URL}/api/auth/register`, {
+      // Use different endpoint for vendor registration
+      const endpoint = formData.role === 'VENDOR' 
+        ? '/api/auth/register/vendor' 
+        : '/api/auth/register';
+
+      const requestBody = formData.role === 'VENDOR'
+        ? {
+            firstName: formData.firstName,
+            lastName: formData.lastName,
+            email: formData.email,
+            phone: formData.phone,
+            password: formData.password,
+            confirmPassword: formData.confirmPassword,
+            businessName: formData.businessName,
+            businessType: formData.businessType,
+            region: formData.region,
+          }
+        : {
+            name: `${formData.firstName} ${formData.lastName}`.trim(),
+            email: formData.email,
+            phone: formData.phone,
+            password: formData.password,
+            confirmPassword: formData.confirmPassword,
+            role: formData.role,
+          };
+
+      const response = await fetch(endpoint, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({
-          firstName: formData.firstName,
-          lastName: formData.lastName,
-          email: formData.email,
-          phone: formData.phone,
-          password: formData.password,
-          confirmPassword: formData.confirmPassword, // Add confirmPassword
-          role: formData.role,
-          region: formData.region,
-          // Vendor-specific fields
-          ...(formData.role === 'VENDOR' && {
-            businessName: formData.businessName,
-            businessType: formData.businessType,
-          }),
-        }),
+        credentials: 'include',
+        body: JSON.stringify(requestBody),
       });
 
       const data = await response.json();
 
       if (!response.ok) {
-        setError(data.message || 'Registration failed. Please try again.');
+        if (response.status === 409) {
+          setError('An account with this email address already exists.');
+        } else {
+          setError(data.error || 'Unable to create your account. Please try again.');
+        }
         setLoading(false);
         return;
       }
 
-      setSuccess('Account created successfully! Redirecting to login...');
+      const { user, token } = data;
+
+      if (token) {
+        localStorage.setItem('auth_token', token);
+      }
+
+      setUserData({
+        email: user.email,
+        name: user.name,
+      });
+      setUserRole(user.role);
+      setLoggedIn(true);
+
+      setSessionCookie({
+        role: user.role,
+        email: user.email,
+        name: user.name,
+        region: formData.region,
+      });
+
+      // Show success message
+      if (formData.role === 'VENDOR') {
+        setSuccess('Vendor account created successfully! Your account is pending approval.');
+      } else {
+        setSuccess('Account created successfully! Redirecting...');
+      }
+
       setTimeout(() => {
-        router.push('/auth/login?role=' + (formData.role === 'VENDOR' ? 'vendor' : 'customer'));
-      }, 2000);
+        const redirectPath =
+          user.role === 'ADMIN'
+            ? '/admin'
+            : user.role === 'VENDOR'
+            ? '/vendor'
+            : '/dashboard';
+        router.push(redirectPath);
+      }, 1000);
     } catch (err) {
       console.error('Signup error:', err);
-      setError('Network error. Please check if backend server is running.');
+      setError('Unable to connect. Please check your backend server / internet connection.');
     } finally {
       setLoading(false);
     }
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-[#F8FAFC] p-4">
-      {/* Background Effects */}
-      <div className="absolute inset-0 overflow-hidden pointer-events-none">
-        <div className="absolute w-96 h-96 bg-amber-200/20 rounded-full blur-3xl top-20 left-20 animate-pulse" />
-        <div className="absolute w-96 h-96 bg-amber-300/15 rounded-full blur-3xl bottom-20 right-20 animate-pulse delay-1000" />
-      </div>
+    <div className="min-h-screen bg-slate-50 flex flex-col justify-between">
+      <Header />
 
-      {/* Signup Card */}
-      <div className="relative w-full max-w-md">
-        <div className="bg-white border border-slate-200 rounded-2xl shadow-xl p-8">
-          {/* Logo */}
-          <div className="flex justify-center mb-6">
-            <img 
-              src="/logo.png" 
-              alt="SheeshaTonight" 
-              className="h-14 w-auto object-contain"
-            />
+      {/* Main Area */}
+      <main className="flex-1 py-12 px-4 sm:px-6 lg:px-8 flex items-center justify-center bg-gradient-to-b from-purple-950/5 via-slate-50 to-slate-100 relative overflow-hidden">
+        {/* Ambient background glows */}
+        <div className="absolute inset-0 pointer-events-none overflow-hidden">
+          <div className="absolute top-10 left-1/2 -translate-x-1/2 w-[700px] h-[350px] bg-purple-900/10 rounded-full blur-3xl opacity-60" />
+          <div className="absolute bottom-10 left-10 w-80 h-80 bg-amber-500/10 rounded-full blur-3xl opacity-40" />
+        </div>
+
+        <div className="w-full max-w-xl relative z-10">
+          {/* Header Title & Branding */}
+          <div className="text-center mb-8">
+            <span className="inline-block text-[#8a277d] text-xs font-extrabold uppercase tracking-[2px] mb-2">
+              JOIN THE EXPERIENCE
+            </span>
+
+            {/* Signature SheeshaTonight Gold Ornament */}
+            <div className="gold-line flex items-center justify-center gap-1.5 my-2">
+              <i className="w-6 h-[1px] bg-[#f5b83d]" />
+              <b className="w-1.5 h-1.5 bg-[#f5b83d] rounded-full" />
+              <i className="w-6 h-[1px] bg-[#f5b83d]" />
+            </div>
+
+            <h1 className="text-3xl sm:text-4xl font-bold text-slate-900 tracking-tight font-serif">
+              Create Your <span className="text-[#8a277d]">Account</span>
+            </h1>
+            <p className="mt-2 text-sm text-slate-600">
+              Join UAE & UK’s premium sheesha rental and tobacco marketplace
+            </p>
           </div>
 
-          {/* Title */}
-          <h1 className="text-3xl font-bold text-slate-900 text-center mb-2">
-            Create Account
-          </h1>
-          <p className="text-slate-600 text-center mb-6">
-            Join as a {formData.role === 'VENDOR' ? 'Seller' : 'Buyer'}
-          </p>
+          {/* Form Card */}
+          <div className="bg-white border border-[#e9e4eb] rounded-2xl shadow-xl p-6 sm:p-8 backdrop-blur-sm">
+            {/* Account Type Selector (Buyer vs Vendor) */}
+            <div className="mb-6 grid grid-cols-2 gap-2 bg-slate-100 p-1.5 rounded-xl">
+              <button
+                type="button"
+                onClick={() => setFormData((prev) => ({ ...prev, role: 'CUSTOMER' }))}
+                className={`flex items-center justify-center gap-2 py-2.5 px-4 rounded-lg text-xs font-bold transition-all ${
+                  formData.role === 'CUSTOMER'
+                    ? 'bg-[#8a277d] text-white shadow-md'
+                    : 'text-slate-600 hover:text-slate-900 hover:bg-slate-200/60'
+                }`}
+              >
+                <UserCheck className="w-4 h-4" />
+                <span>Customer (Buyer)</span>
+              </button>
 
-          {/* Form */}
-          <form onSubmit={handleSignup} className="space-y-4">
-            {/* First Name */}
-            <div>
-              <label className="block text-sm font-medium text-slate-700 mb-2">
-                First Name
-              </label>
-              <div className="relative">
-                <User className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400" />
-                <input
-                  type="text"
-                  name="firstName"
-                  value={formData.firstName}
-                  onChange={handleChange}
-                  placeholder="John"
-                  className="w-full pl-11 pr-4 py-3 bg-slate-50 border border-slate-200 rounded-lg text-slate-900 placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-[#D4AF37] focus:border-transparent transition-all"
-                  required
-                />
-              </div>
+              <button
+                type="button"
+                onClick={() => setFormData((prev) => ({ ...prev, role: 'VENDOR' }))}
+                className={`flex items-center justify-center gap-2 py-2.5 px-4 rounded-lg text-xs font-bold transition-all ${
+                  formData.role === 'VENDOR'
+                    ? 'bg-[#8a277d] text-white shadow-md'
+                    : 'text-slate-600 hover:text-slate-900 hover:bg-slate-200/60'
+                }`}
+              >
+                <Store className="w-4 h-4" />
+                <span>Vendor (Seller)</span>
+              </button>
             </div>
 
-            {/* Last Name */}
-            <div>
-              <label className="block text-sm font-medium text-slate-700 mb-2">
-                Last Name
-              </label>
-              <div className="relative">
-                <User className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400" />
-                <input
-                  type="text"
-                  name="lastName"
-                  value={formData.lastName}
-                  onChange={handleChange}
-                  placeholder="Doe"
-                  className="w-full pl-11 pr-4 py-3 bg-slate-50 border border-slate-200 rounded-lg text-slate-900 placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-[#D4AF37] focus:border-transparent transition-all"
-                />
-              </div>
-            </div>
-
-            {/* Vendor-specific fields */}
-            {formData.role === 'VENDOR' && (
-              <>
+            <form onSubmit={handleSignup} className="space-y-4">
+              {/* Name Row */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-sm font-medium text-slate-700 mb-2">
-                    Business Name
+                  <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">
+                    First Name <span className="text-[#8a277d]">*</span>
                   </label>
                   <div className="relative">
-                    <Store className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400" />
+                    <User className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-[#8a277d]" />
                     <input
                       type="text"
-                      name="businessName"
-                      value={formData.businessName}
+                      name="firstName"
+                      value={formData.firstName}
                       onChange={handleChange}
-                      placeholder="Your Business Name"
-                      className="w-full pl-11 pr-4 py-3 bg-slate-50 border border-slate-200 rounded-lg text-slate-900 placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-[#D4AF37] focus:border-transparent transition-all"
+                      placeholder="John"
+                      className="w-full pl-10 pr-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-slate-900 placeholder-slate-400 text-sm focus:outline-none focus:border-[#8a277d] focus:ring-4 focus:ring-[#8a277d]/10 transition-all font-medium"
                       required
                     />
                   </div>
                 </div>
 
                 <div>
-                  <label className="block text-sm font-medium text-slate-700 mb-2">
-                    Business Type
+                  <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">
+                    Last Name <span className="text-[#8a277d]">*</span>
                   </label>
-                  <select
-                    name="businessType"
-                    value={formData.businessType}
-                    onChange={handleChange}
-                    className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-lg text-slate-900 focus:outline-none focus:ring-2 focus:ring-[#D4AF37] focus:border-transparent transition-all"
-                    required
-                  >
-                    <option value="">Select Type</option>
-                    <option value="retailer">Retailer</option>
-                    <option value="wholesaler">Wholesaler</option>
-                    <option value="manufacturer">Manufacturer</option>
-                    <option value="rental">Rental Service</option>
-                  </select>
+                  <div className="relative">
+                    <User className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-[#8a277d]" />
+                    <input
+                      type="text"
+                      name="lastName"
+                      value={formData.lastName}
+                      onChange={handleChange}
+                      placeholder="Doe"
+                      className="w-full pl-10 pr-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-slate-900 placeholder-slate-400 text-sm focus:outline-none focus:border-[#8a277d] focus:ring-4 focus:ring-[#8a277d]/10 transition-all font-medium"
+                      required
+                    />
+                  </div>
                 </div>
-              </>
-            )}
-
-            {/* Email */}
-            <div>
-              <label className="block text-sm font-medium text-slate-700 mb-2">
-                Email Address
-              </label>
-              <div className="relative">
-                <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400" />
-                <input
-                  type="email"
-                  name="email"
-                  value={formData.email}
-                  onChange={handleChange}
-                  placeholder="you@example.com"
-                  className="w-full pl-11 pr-4 py-3 bg-slate-50 border border-slate-200 rounded-lg text-slate-900 placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-[#D4AF37] focus:border-transparent transition-all"
-                  required
-                />
               </div>
-            </div>
 
-            {/* Phone */}
-            <div>
-              <label className="block text-sm font-medium text-slate-700 mb-2">
-                Phone Number
-              </label>
-              <div className="relative">
-                <Phone className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400" />
-                <input
-                  type="tel"
-                  name="phone"
-                  value={formData.phone}
-                  onChange={handleChange}
-                  placeholder="+971 50 123 4567"
-                  className="w-full pl-11 pr-4 py-3 bg-slate-50 border border-slate-200 rounded-lg text-slate-900 placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-[#D4AF37] focus:border-transparent transition-all"
-                  required
-                />
-              </div>
-            </div>
+              {/* Vendor Fields */}
+              {formData.role === 'VENDOR' && (
+                <div className="p-4 bg-purple-50/70 border border-purple-200 rounded-xl space-y-4">
+                  <p className="text-xs font-bold text-[#8a277d] uppercase tracking-wider">
+                    Vendor Details
+                  </p>
+                  <div>
+                    <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">
+                      Business Name <span className="text-[#8a277d]">*</span>
+                    </label>
+                    <div className="relative">
+                      <Store className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-[#8a277d]" />
+                      <input
+                        type="text"
+                        name="businessName"
+                        value={formData.businessName}
+                        onChange={handleChange}
+                        placeholder="e.g. Sultan Sheesha Lounge"
+                        className="w-full pl-10 pr-4 py-2.5 bg-white border border-slate-200 rounded-xl text-slate-900 placeholder-slate-400 text-sm focus:outline-none focus:border-[#8a277d] focus:ring-4 focus:ring-[#8a277d]/10 transition-all font-medium"
+                        required
+                      />
+                    </div>
+                  </div>
 
-            {/* Region */}
-            <div>
-              <label className="block text-sm font-medium text-slate-700 mb-2">
-                Region
-              </label>
-              <div className="relative">
-                <MapPin className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400" />
-                <select
-                  name="region"
-                  value={formData.region}
-                  onChange={handleChange}
-                  className="w-full pl-11 pr-4 py-3 bg-slate-50 border border-slate-200 rounded-lg text-slate-900 focus:outline-none focus:ring-2 focus:ring-[#D4AF37] focus:border-transparent transition-all appearance-none"
-                >
-                  <option value="Dubai, UAE">Dubai, UAE</option>
-                  <option value="Abu Dhabi, UAE">Abu Dhabi, UAE</option>
-                  <option value="Sharjah, UAE">Sharjah, UAE</option>
-                  <option value="London, UK">London, UK</option>
-                  <option value="Manchester, UK">Manchester, UK</option>
-                </select>
-              </div>
-            </div>
-
-            {/* Password */}
-            <div>
-              <label className="block text-sm font-medium text-slate-700 mb-2">
-                Password
-              </label>
-              <div className="relative">
-                <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400" />
-                <input
-                  type={showPassword ? 'text' : 'password'}
-                  name="password"
-                  value={formData.password}
-                  onChange={handleChange}
-                  placeholder="At least 6 characters"
-                  className="w-full pl-11 pr-12 py-3 bg-slate-50 border border-slate-200 rounded-lg text-slate-900 placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-[#D4AF37] focus:border-transparent transition-all"
-                  required
-                />
-                <button
-                  type="button"
-                  onClick={() => setShowPassword(!showPassword)}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
-                >
-                  {showPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
-                </button>
-              </div>
-            </div>
-
-            {/* Confirm Password */}
-            <div>
-              <label className="block text-sm font-medium text-slate-700 mb-2">
-                Confirm Password
-              </label>
-              <div className="relative">
-                <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400" />
-                <input
-                  type={showConfirmPassword ? 'text' : 'password'}
-                  name="confirmPassword"
-                  value={formData.confirmPassword}
-                  onChange={handleChange}
-                  placeholder="Re-enter your password"
-                  className="w-full pl-11 pr-12 py-3 bg-slate-50 border border-slate-200 rounded-lg text-slate-900 placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-[#D4AF37] focus:border-transparent transition-all"
-                  required
-                />
-                <button
-                  type="button"
-                  onClick={() => setShowConfirmPassword(!showConfirmPassword)}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
-                >
-                  {showConfirmPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
-                </button>
-              </div>
-            </div>
-
-            {/* Error Message */}
-            {error && (
-              <div className="p-3 bg-red-500/10 border border-red-500/50 rounded-lg">
-                <p className="text-red-600 text-sm">{error}</p>
-              </div>
-            )}
-
-            {/* Success Message */}
-            {success && (
-              <div className="p-3 bg-green-500/10 border border-green-500/50 rounded-lg">
-                <p className="text-green-600 text-sm">{success}</p>
-              </div>
-            )}
-
-            {/* Submit Button */}
-            <button
-              type="submit"
-              disabled={loading}
-              className="w-full py-3.5 bg-[#D4AF37] hover:bg-[#B8902A] text-white font-semibold rounded-lg shadow-lg hover:shadow-xl transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
-            >
-              {loading ? (
-                <>
-                  <Loader2 className="w-5 h-5 animate-spin" />
-                  Creating Account...
-                </>
-              ) : (
-                'Create Account'
+                  <div>
+                    <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">
+                      Business Type <span className="text-[#8a277d]">*</span>
+                    </label>
+                    <select
+                      name="businessType"
+                      value={formData.businessType}
+                      onChange={handleChange}
+                      className="w-full px-4 py-2.5 bg-white border border-slate-200 rounded-xl text-slate-900 text-sm focus:outline-none focus:border-[#8a277d] focus:ring-4 focus:ring-[#8a277d]/10 transition-all font-medium"
+                      required
+                    >
+                      <option value="">Select Business Type</option>
+                      <option value="retailer">Retailer</option>
+                      <option value="wholesaler">Wholesaler</option>
+                      <option value="manufacturer">Manufacturer</option>
+                      <option value="rental">Rental Service & Delivery</option>
+                    </select>
+                  </div>
+                </div>
               )}
-            </button>
-          </form>
 
-          {/* Footer */}
-          <div className="mt-6 text-center">
-            <p className="text-slate-600 text-sm">
-              Already have an account?{' '}
-              <button 
-                onClick={() => router.push('/auth/login')}
-                className="text-[#D4AF37] hover:text-[#B8902A] font-semibold"
+              {/* Email Address */}
+              <div>
+                <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">
+                  Email Address <span className="text-[#8a277d]">*</span>
+                </label>
+                <div className="relative">
+                  <Mail className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-[#8a277d]" />
+                  <input
+                    type="email"
+                    name="email"
+                    value={formData.email}
+                    onChange={handleChange}
+                    placeholder="you@example.com"
+                    className="w-full pl-10 pr-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-slate-900 placeholder-slate-400 text-sm focus:outline-none focus:border-[#8a277d] focus:ring-4 focus:ring-[#8a277d]/10 transition-all font-medium"
+                    required
+                  />
+                </div>
+              </div>
+
+              {/* Phone & Region Row */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">
+                    Phone Number <span className="text-[#8a277d]">*</span>
+                  </label>
+                  <div className="relative">
+                    <Phone className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-[#8a277d]" />
+                    <input
+                      type="tel"
+                      name="phone"
+                      value={formData.phone}
+                      onChange={handleChange}
+                      placeholder="+971 50 123 4567"
+                      className="w-full pl-10 pr-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-slate-900 placeholder-slate-400 text-sm focus:outline-none focus:border-[#8a277d] focus:ring-4 focus:ring-[#8a277d]/10 transition-all font-medium"
+                      required
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">
+                    Region <span className="text-[#8a277d]">*</span>
+                  </label>
+                  <div className="relative">
+                    <MapPin className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-[#8a277d]" />
+                    <select
+                      name="region"
+                      value={formData.region}
+                      onChange={handleChange}
+                      className="w-full pl-10 pr-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-slate-900 text-sm focus:outline-none focus:border-[#8a277d] focus:ring-4 focus:ring-[#8a277d]/10 transition-all font-medium appearance-none"
+                    >
+                      <option value="Dubai, UAE">Dubai, UAE</option>
+                      <option value="Abu Dhabi, UAE">Abu Dhabi, UAE</option>
+                      <option value="Sharjah, UAE">Sharjah, UAE</option>
+                      <option value="London, UK">London, UK</option>
+                      <option value="Manchester, UK">Manchester, UK</option>
+                    </select>
+                  </div>
+                </div>
+              </div>
+
+              {/* Passwords Row */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">
+                    Password <span className="text-[#8a277d]">*</span>
+                  </label>
+                  <div className="relative">
+                    <Lock className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-[#8a277d]" />
+                    <input
+                      type={showPassword ? 'text' : 'password'}
+                      name="password"
+                      value={formData.password}
+                      onChange={handleChange}
+                      placeholder="At least 8 characters"
+                      className="w-full pl-10 pr-10 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-slate-900 placeholder-slate-400 text-sm focus:outline-none focus:border-[#8a277d] focus:ring-4 focus:ring-[#8a277d]/10 transition-all font-medium"
+                      required
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowPassword(!showPassword)}
+                      className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-[#8a277d] p-1 transition-colors"
+                      aria-label="Toggle password visibility"
+                    >
+                      {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                    </button>
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">
+                    Confirm Password <span className="text-[#8a277d]">*</span>
+                  </label>
+                  <div className="relative">
+                    <Lock className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-[#8a277d]" />
+                    <input
+                      type={showConfirmPassword ? 'text' : 'password'}
+                      name="confirmPassword"
+                      value={formData.confirmPassword}
+                      onChange={handleChange}
+                      placeholder="Re-enter password"
+                      className="w-full pl-10 pr-10 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-slate-900 placeholder-slate-400 text-sm focus:outline-none focus:border-[#8a277d] focus:ring-4 focus:ring-[#8a277d]/10 transition-all font-medium"
+                      required
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+                      className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-[#8a277d] p-1 transition-colors"
+                      aria-label="Toggle confirm password visibility"
+                    >
+                      {showConfirmPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              {/* Error Box */}
+              {error && (
+                <div className="p-3.5 bg-red-50 border border-red-200 rounded-xl">
+                  <p className="text-red-700 text-xs font-medium leading-relaxed">{error}</p>
+                </div>
+              )}
+
+              {/* Success Box */}
+              {success && (
+                <div className="p-3.5 bg-green-50 border border-green-200 rounded-xl flex items-center gap-2">
+                  <CheckCircle2 className="w-4 h-4 text-green-600 flex-shrink-0" />
+                  <p className="text-green-700 text-xs font-medium">{success}</p>
+                </div>
+              )}
+
+              {/* Submit Button */}
+              <button
+                type="submit"
+                disabled={loading}
+                className="w-full py-3.5 px-6 bg-[#8a277d] hover:bg-[#641c5f] active:bg-[#52154e] text-white font-bold rounded-xl shadow-lg shadow-purple-900/20 hover:shadow-purple-900/30 transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 text-sm tracking-wide mt-2"
               >
-                Sign In
+                {loading ? (
+                  <>
+                    <Loader2 className="w-5 h-5 animate-spin" />
+                    <span>Creating Account...</span>
+                  </>
+                ) : (
+                  <span>Create Account</span>
+                )}
               </button>
-            </p>
-            <p className="text-slate-400 text-xs mt-4">
-              By signing up, you agree to our Terms & Privacy Policy
-            </p>
+            </form>
+
+            {/* Bottom Link */}
+            <div className="mt-6 pt-6 border-t border-slate-100 text-center">
+              <p className="text-slate-600 text-sm">
+                Already have an account?{' '}
+                <button
+                  onClick={() => router.push('/auth/login')}
+                  className="text-[#8a277d] hover:text-[#641c5f] font-bold underline underline-offset-4 ml-1 transition-colors"
+                >
+                  Sign In
+                </button>
+              </p>
+            </div>
           </div>
         </div>
+      </main>
 
-        {/* Decorative Elements */}
-        <div className="absolute -top-4 -left-4 w-24 h-24 bg-[#D4AF37]/10 rounded-full blur-xl" />
-        <div className="absolute -bottom-4 -right-4 w-32 h-32 bg-[#D4AF37]/10 rounded-full blur-xl" />
-      </div>
+      <Footer />
     </div>
+  );
+}
+
+export default function SignupPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="min-h-screen flex items-center justify-center bg-slate-50">
+          <Loader2 className="w-10 h-10 text-[#8a277d] animate-spin" />
+        </div>
+      }
+    >
+      <SignupContent />
+    </Suspense>
   );
 }

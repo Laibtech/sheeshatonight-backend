@@ -1,222 +1,320 @@
 'use client';
 
-import React, { useState, useCallback } from 'react';
-import { useRoleGuard } from '@/lib/hooks/useRoleGuard';
-import { DataTable } from '@/components/DataTable';
-import { StatCard } from '@/components/StatCard';
-import { ShoppingCart, TrendingUp, Clock, Trash2 } from 'lucide-react';
-import ActionModal from '@/components/ActionModal';
-import { useActions } from '@/lib/hooks/useActions';
-import { Toast } from '@/components/Toast';
+import React, { useEffect, useState, useCallback } from 'react';
+import Link from 'next/link';
+import { useSearchParams, useRouter } from 'next/navigation';
+import { Eye, Search, Filter, ShoppingBag, ShieldCheck, Clock, CheckCircle2, XCircle } from 'lucide-react';
+import { StatusBadge } from '@/components/admin/StatusBadge';
+import { DataTable, Column } from '@/components/admin/DataTable';
 
-const initialOrders = [
-  { id: 'ORD-001', customer: 'Ahmed Al-Khaleej', total: 'AED 450', items: 2, status: 'Pending', date: '2024-01-15' },
-  { id: 'ORD-002', customer: 'Fatima Hassan', total: 'AED 1,230', items: 5, status: 'Preparing', date: '2024-01-14' },
-  { id: 'ORD-003', customer: 'Mohammed Khan', total: 'AED 780', items: 3, status: 'Shipped', date: '2024-01-13' },
-  { id: 'ORD-004', customer: 'Sara Al-Mansouri', total: 'AED 560', items: 2, status: 'Delivered', date: '2024-01-12' },
-];
-
-export default function AdminOrders() {
-  const { isAllowed } = useRoleGuard(['ADMIN']);
-  const { performAction } = useActions();
-  const [orders, setOrders] = useState(initialOrders);
-  const [actionModal, setActionModal] = useState({
-    isOpen: false,
-    type: 'accept' as any,
-    orderId: '',
-    orderRef: '',
-  });
-  const [toastOpen, setToastOpen] = useState(false);
-  const [toastMessage, setToastMessage] = useState('');
-  const [toastType, setToastType] = useState<'success' | 'error' | 'info'>('success');
-  const [loadingIds, setLoadingIds] = useState(new Set<string | number>());
-
-  if (!isAllowed) return null;
-
-  const showToast = (message: string, variant: 'success' | 'error' = 'success') => {
-    setToastMessage(message);
-    setToastType(variant === 'error' ? 'error' : 'success');
-    setToastOpen(true);
+interface OrderRecord {
+  id: string;
+  orderNumber: string;
+  totalAmount: number;
+  subtotal?: number;
+  platformFee?: number;
+  vendorNet?: number;
+  commissionRate?: number;
+  payoutStatus?: string;
+  currency: string;
+  status: string;
+  createdAt: string;
+  user: {
+    name: string;
+    email: string;
+    phone?: string;
   };
-
-  const getStatusBadge = (status: string) => {
-    const statusColors: Record<string, { bg: string; text: string }> = {
-      Pending: { bg: 'bg-yellow-100', text: 'text-yellow-700' },
-      Preparing: { bg: 'bg-blue-100', text: 'text-blue-700' },
-      Shipped: { bg: 'bg-purple-100', text: 'text-purple-700' },
-      Delivered: { bg: 'bg-green-100', text: 'text-green-700' },
-      Cancelled: { bg: 'bg-red-100', text: 'text-red-700' },
+  vendor: {
+    name: string;
+    slug: string;
+  };
+  items: Array<{
+    id: string;
+    quantity: number;
+    price: number;
+    product: {
+      title: string;
     };
-    const colors = statusColors[status] || { bg: 'bg-slate-100', text: 'text-slate-700' };
-    return (
-      <span className={`rounded-full px-3 py-1 text-xs font-semibold w-fit ${colors.bg} ${colors.text}`}>
-        {status}
-      </span>
-    );
-  };
+  }>;
+}
 
-  const handleAction = useCallback((orderId: string, action: string, orderRef: string) => {
-    setActionModal({ isOpen: true, type: action, orderId, orderRef });
-  }, []);
+export default function AdminOrdersPage() {
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  const initialStatus = searchParams.get('status') || 'ALL';
 
-  const confirmAction = useCallback(async () => {
-    const { orderId, type } = actionModal;
+  const [orders, setOrders] = useState<OrderRecord[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [search, setSearch] = useState('');
+  const [selectedStatus, setSelectedStatus] = useState(initialStatus);
+  const [selectedPayoutStatus, setSelectedPayoutStatus] = useState('ALL');
+  const [page, setPage] = useState(1);
+  const [totalPages, setTotalPages] = useState(1);
+  const [totalOrders, setTotalOrders] = useState(0);
 
-    setLoadingIds(prev => new Set(prev).add(orderId));
-
+  const fetchOrders = useCallback(async () => {
     try {
-      const result = await performAction('order', orderId, type);
+      setLoading(true);
+      const token = localStorage.getItem('auth_token');
+      const headers: Record<string, string> = token ? { Authorization: `Bearer ${token}` } : {};
 
-      if (result.success) {
-        // Update local state
-        setOrders(prev =>
-          prev.map(o =>
-            o.id === orderId
-              ? {
-                  ...o,
-                  status:
-                    type === 'accept'
-                      ? 'Preparing'
-                      : type === 'decline'
-                      ? 'Cancelled'
-                      : type === 'cancel'
-                      ? 'Cancelled'
-                      : type === 'ship'
-                      ? 'Shipped'
-                      : type === 'deliver'
-                      ? 'Delivered'
-                      : o.status,
-                }
-              : o
-          )
-        );
+      const params = new URLSearchParams();
+      params.set('page', page.toString());
+      params.set('pageSize', '10');
+      if (search.trim()) params.set('search', search.trim());
+      if (selectedStatus && selectedStatus !== 'ALL') params.set('status', selectedStatus);
+      if (selectedPayoutStatus && selectedPayoutStatus !== 'ALL') params.set('payoutStatus', selectedPayoutStatus);
 
-        showToast(`Order ${type}ed successfully`, 'success');
-        setActionModal({ isOpen: false, type: '', orderId: '', orderRef: '' });
-      } else {
-        showToast(result.error || `Failed to ${type} order`, 'error');
+      const res = await fetch(`/api/admin/orders?${params.toString()}`, { headers });
+      if (res.ok) {
+        const data = await res.json();
+        setOrders(data.data || []);
+        if (data.pagination) {
+          setTotalPages(data.pagination.totalPages || 1);
+          setTotalOrders(data.pagination.total || 0);
+        }
       }
-    } catch (error) {
-      showToast(`Error: ${error instanceof Error ? error.message : 'Unknown error'}`, 'error');
+    } catch (err) {
+      console.error('Failed to fetch orders:', err);
     } finally {
-      setLoadingIds(prev => {
-        const next = new Set(prev);
-        next.delete(orderId);
-        return next;
-      });
+      setLoading(false);
     }
-  }, [actionModal, performAction]);
+  }, [page, search, selectedStatus, selectedPayoutStatus]);
 
-  const stats = {
-    total: orders.length,
-    pending: orders.filter(o => o.status === 'Pending').length,
-    completed: orders.filter(o => o.status === 'Delivered').length,
+  useEffect(() => {
+    fetchOrders();
+  }, [fetchOrders]);
+
+  const formatAED = (amount: number = 0) => {
+    return new Intl.NumberFormat('en-AE', {
+      style: 'currency',
+      currency: 'AED',
+      minimumFractionDigits: 0,
+      maximumFractionDigits: 2,
+    }).format(amount);
   };
+
+  const getPayoutBadge = (payoutStatus?: string) => {
+    const p = (payoutStatus || 'PENDING').toUpperCase();
+    switch (p) {
+      case 'ELIGIBLE':
+        return (
+          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">
+            <ShieldCheck className="w-3 h-3" /> Eligible
+          </span>
+        );
+      case 'PAID':
+        return (
+          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-purple-50 text-purple-700 border border-purple-200">
+            <CheckCircle2 className="w-3 h-3" /> Disbursed
+          </span>
+        );
+      case 'PENDING':
+        return (
+          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium bg-amber-50 text-amber-700 border border-amber-200">
+            <Clock className="w-3 h-3" /> Pending
+          </span>
+        );
+      case 'FAILED':
+      case 'REFUNDED':
+        return (
+          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium bg-rose-50 text-rose-700 border border-rose-200">
+            <XCircle className="w-3 h-3" /> {p}
+          </span>
+        );
+      default:
+        return (
+          <span className="px-2 py-0.5 rounded-full text-[10px] font-medium bg-slate-100 text-slate-700">
+            {p}
+          </span>
+        );
+    }
+  };
+
+  const columns: Column<OrderRecord>[] = [
+    {
+      header: 'Order ID',
+      cell: (row) => (
+        <Link
+          href={`/admin/orders/${row.id}`}
+          className="font-bold text-[#74189B] hover:underline"
+        >
+          #{row.orderNumber}
+        </Link>
+      ),
+    },
+    {
+      header: 'Customer',
+      cell: (row) => (
+        <div>
+          <p className="font-bold text-[#29252B]">{row.user?.name || 'Guest User'}</p>
+          <p className="text-[11px] text-[#716975]">{row.user?.email || 'N/A'}</p>
+        </div>
+      ),
+    },
+    {
+      header: 'Vendor',
+      cell: (row) => (
+        <span className="font-semibold text-slate-800">
+          {row.vendor?.name || 'Direct'}
+        </span>
+      ),
+    },
+    {
+      header: 'Date',
+      cell: (row) => (
+        <span className="text-[#716975]">
+          {new Date(row.createdAt).toLocaleDateString('en-AE', {
+            day: 'numeric',
+            month: 'short',
+            year: 'numeric',
+          })}
+        </span>
+      ),
+    },
+    {
+      header: 'Total (Gross)',
+      cell: (row) => (
+        <span className="font-black text-[#29252B] font-mono">
+          {formatAED(row.totalAmount)}
+        </span>
+      ),
+    },
+    {
+      header: 'Platform Fee',
+      cell: (row) => (
+        <span className="font-mono text-rose-500 font-medium">
+          +{formatAED(row.platformFee || 0)}
+        </span>
+      ),
+    },
+    {
+      header: 'Vendor Net',
+      cell: (row) => (
+        <span className="font-mono text-emerald-700 font-bold">
+          {formatAED(row.vendorNet || (row.totalAmount - (row.platformFee || 0)))}
+        </span>
+      ),
+    },
+    {
+      header: 'Order Status',
+      cell: (row) => <StatusBadge status={row.status} />,
+    },
+    {
+      header: 'Payout',
+      cell: (row) => getPayoutBadge(row.payoutStatus),
+    },
+    {
+      header: 'Actions',
+      className: 'text-right',
+      cell: (row) => (
+        <div className="flex items-center justify-end gap-1.5">
+          <Link
+            href={`/admin/orders/${row.id}`}
+            className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg bg-[#FAF8FB] hover:bg-[#74189B] text-[#74189B] hover:text-white border border-[#E9E3EB] text-xs font-bold transition shadow-xs"
+          >
+            <Eye className="w-3.5 h-3.5" />
+            <span>Details</span>
+          </Link>
+        </div>
+      ),
+    },
+  ];
+
+  const statusOptions = [
+    { label: 'All Orders', value: 'ALL' },
+    { label: 'Pending', value: 'PREPARING' },
+    { label: 'Ready for Pickup', value: 'READY_FOR_PICKUP' },
+    { label: 'Out for Delivery', value: 'OUT_FOR_DELIVERY' },
+    { label: 'Delivered', value: 'DELIVERED' },
+    { label: 'Active Rental', value: 'ACTIVE_RENTAL' },
+    { label: 'Completed', value: 'COMPLETED' },
+    { label: 'Cancelled', value: 'CANCELLED' },
+  ];
+
+  const payoutOptions = [
+    { label: 'All Payouts', value: 'ALL' },
+    { label: 'Eligible', value: 'ELIGIBLE' },
+    { label: 'Pending Clearance', value: 'PENDING' },
+    { label: 'Disbursed (Paid)', value: 'PAID' },
+  ];
 
   return (
-    <div className="flex h-screen bg-slate-50">
-      <main className="flex-1 overflow-y-auto lg:ml-64 pt-20 lg:pt-0">
-        <div className="p-6 max-w-7xl mx-auto">
-          <h1 className="text-3xl font-black text-slate-900 mb-2">Orders Management</h1>
-          <p className="text-slate-600 mb-8">Manage all platform orders and fulfillment</p>
-
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-8">
-            <StatCard title="Total Orders" value={stats.total.toString()} trend="+12%" icon={<ShoppingCart />} />
-            <StatCard title="Pending" value={stats.pending.toString()} trend="+5%" icon={<Clock />} />
-            <StatCard title="Completed" value={stats.completed.toString()} trend="+8%" icon={<TrendingUp />} />
+    <div className="space-y-6 pb-12">
+      {/* Page Header */}
+      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+        <div>
+          <div className="flex items-center gap-2">
+            <h1 className="text-2xl font-black text-[#29252B] tracking-tight">
+              Orders Management
+            </h1>
+            <span className="px-2.5 py-0.5 rounded-full bg-[#74189B]/10 text-[#74189B] text-xs font-bold border border-[#74189B]/20">
+              {totalOrders} Orders
+            </span>
           </div>
-
-          <div className="bg-white rounded-2xl border border-slate-200 overflow-hidden">
-            <table className="w-full text-sm">
-              <thead className="bg-slate-50 border-b border-slate-200">
-                <tr>
-                  <th className="px-6 py-4 text-left font-semibold text-slate-600">Order ID</th>
-                  <th className="px-6 py-4 text-left font-semibold text-slate-600">Customer</th>
-                  <th className="px-6 py-4 text-left font-semibold text-slate-600">Total</th>
-                  <th className="px-6 py-4 text-left font-semibold text-slate-600">Items</th>
-                  <th className="px-6 py-4 text-left font-semibold text-slate-600">Status</th>
-                  <th className="px-6 py-4 text-left font-semibold text-slate-600">Date</th>
-                  <th className="px-6 py-4 text-left font-semibold text-slate-600">Actions</th>
-                </tr>
-              </thead>
-              <tbody>
-                {orders.map((order) => (
-                  <tr key={order.id} className={`border-b border-slate-200 hover:bg-slate-50 transition ${loadingIds.has(order.id) ? 'opacity-60' : ''}`}>
-                    <td className="px-6 py-4 font-semibold text-slate-900">{order.id}</td>
-                    <td className="px-6 py-4 text-slate-600">{order.customer}</td>
-                    <td className="px-6 py-4 font-semibold text-slate-900">{order.total}</td>
-                    <td className="px-6 py-4 text-slate-600">{order.items}</td>
-                    <td className="px-6 py-4">{getStatusBadge(order.status)}</td>
-                    <td className="px-6 py-4 text-slate-600">{order.date}</td>
-                    <td className="px-6 py-4">
-                      <div className="flex gap-2 flex-wrap">
-                        {order.status === 'Pending' && (
-                          <>
-                            <button
-                              onClick={() => handleAction(order.id, 'accept', order.id)}
-                              disabled={loadingIds.has(order.id)}
-                              className="px-3 py-1 bg-green-100 text-green-600 text-xs font-semibold rounded hover:bg-green-200 transition disabled:opacity-50"
-                            >
-                              Accept
-                            </button>
-                            <button
-                              onClick={() => handleAction(order.id, 'decline', order.id)}
-                              disabled={loadingIds.has(order.id)}
-                              className="px-3 py-1 bg-red-100 text-red-600 text-xs font-semibold rounded hover:bg-red-200 transition disabled:opacity-50"
-                            >
-                              Decline
-                            </button>
-                          </>
-                        )}
-                        {order.status === 'Preparing' && (
-                          <button
-                            onClick={() => handleAction(order.id, 'ship', order.id)}
-                            disabled={loadingIds.has(order.id)}
-                            className="px-3 py-1 bg-blue-100 text-blue-600 text-xs font-semibold rounded hover:bg-blue-200 transition disabled:opacity-50"
-                          >
-                            Ship
-                          </button>
-                        )}
-                        {order.status === 'Shipped' && (
-                          <button
-                            onClick={() => handleAction(order.id, 'deliver', order.id)}
-                            disabled={loadingIds.has(order.id)}
-                            className="px-3 py-1 bg-green-100 text-green-600 text-xs font-semibold rounded hover:bg-green-200 transition disabled:opacity-50"
-                          >
-                            Deliver
-                          </button>
-                        )}
-                        {(order.status === 'Pending' || order.status === 'Preparing') && (
-                          <button
-                            onClick={() => handleAction(order.id, 'cancel', order.id)}
-                            disabled={loadingIds.has(order.id)}
-                            className="px-3 py-1 bg-red-100 text-red-600 text-xs font-semibold rounded hover:bg-red-200 transition disabled:opacity-50 flex items-center gap-1"
-                          >
-                            <Trash2 size={12} /> Cancel
-                          </button>
-                        )}
-                      </div>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+          <p className="text-xs text-[#716975] mt-1">
+            Search, track, and reconcile all marketplace orders, platform fees, and vendor payout status in real time.
+          </p>
         </div>
-      </main>
 
-      <ActionModal
-        isOpen={actionModal.isOpen}
-        onClose={() => setActionModal({ isOpen: false, type: '', orderId: '', orderRef: '' })}
-        title={`${actionModal.type.charAt(0).toUpperCase() + actionModal.type.slice(1)} Order`}
-        message={`Are you sure you want to ${actionModal.type} this order?`}
-        actionType={actionModal.type}
-        itemName={actionModal.orderRef}
-        isDangerous={actionModal.type === 'decline' || actionModal.type === 'cancel'}
-        onConfirm={confirmAction}
+        {/* Payout Filter Dropdown */}
+        <div className="flex items-center gap-2">
+          <span className="text-xs font-bold text-slate-500 whitespace-nowrap">Payout Filter:</span>
+          <select
+            value={selectedPayoutStatus}
+            onChange={(e) => {
+              setSelectedPayoutStatus(e.target.value);
+              setPage(1);
+            }}
+            className="px-3 py-1.5 bg-white border border-[#E9E3EB] rounded-xl text-xs font-bold text-slate-700 focus:outline-none focus:border-[#74189B]"
+          >
+            {payoutOptions.map((opt) => (
+              <option key={opt.value} value={opt.value}>
+                {opt.label}
+              </option>
+            ))}
+          </select>
+        </div>
+      </div>
+
+      {/* Filter Status Tabs */}
+      <div className="flex items-center gap-2 overflow-x-auto pb-1 scrollbar-thin">
+        {statusOptions.map((opt) => (
+          <button
+            key={opt.value}
+            onClick={() => {
+              setSelectedStatus(opt.value);
+              setPage(1);
+            }}
+            className={`px-3.5 py-1.5 rounded-xl text-xs font-bold whitespace-nowrap transition border ${
+              selectedStatus === opt.value
+                ? 'bg-[#74189B] text-white border-[#74189B] shadow-xs'
+                : 'bg-white text-[#716975] border-[#E9E3EB] hover:bg-[#FAF8FB]'
+            }`}
+          >
+            {opt.label}
+          </button>
+        ))}
+      </div>
+
+      {/* Orders Table */}
+      <DataTable
+        columns={columns}
+        data={orders}
+        loading={loading}
+        emptyTitle="No orders found"
+        emptyDescription="There are no orders matching your selected filters."
+        searchPlaceholder="Search order #, customer name, email, vendor..."
+        searchValue={search}
+        onSearchChange={(val) => {
+          setSearch(val);
+          setPage(1);
+        }}
+        currentPage={page}
+        totalPages={totalPages}
+        totalItems={totalOrders}
+        onPageChange={setPage}
       />
-
-      <Toast open={toastOpen} message={toastMessage} variant={toastType} onClose={() => setToastOpen(false)} />
     </div>
   );
 }

@@ -1,201 +1,266 @@
 'use client';
 
-import React, { useState, useCallback } from 'react';
-import { useRoleGuard } from '@/lib/hooks/useRoleGuard';
-import { Check, X, Clock, Store, User, Trash2 } from 'lucide-react';
-import ActionModal from '@/components/ActionModal';
-import { useActions } from '@/lib/hooks/useActions';
-import { Toast } from '@/components/Toast';
+import React, { useEffect, useState, useCallback, Suspense } from 'react';
+import Link from 'next/link';
+import { useSearchParams } from 'next/navigation';
+import { Store, Eye, CheckCircle2, XCircle, ShieldCheck, FileText } from 'lucide-react';
+import { DataTable, Column } from '@/components/admin/DataTable';
+import { StatusBadge } from '@/components/admin/StatusBadge';
 
-export default function AdminVendors() {
-  const { isAllowed } = useRoleGuard(['ADMIN']);
-  const { performAction } = useActions();
-  const [vendors, setVendors] = useState([
-    { id: '1', name: 'Bespoke Sheesha', owner: 'Ahmed Al-Khaleej', status: 'Verified', orders: 342, rating: 4.8 },
-    { id: '2', name: 'Luxury Lounge', owner: 'Fatima Hassan', status: 'Verified', orders: 287, rating: 4.9 },
-    { id: '3', name: 'The Ember Room', owner: 'Mohammed Khan', status: 'Pending', orders: 0, rating: 0 },
-  ]);
-
-  const [actionModal, setActionModal] = useState({
-    isOpen: false,
-    type: 'approve' as any,
-    vendorId: '',
-    vendorName: '',
-  });
-
-  const [toastOpen, setToastOpen] = useState(false);
-  const [toastMessage, setToastMessage] = useState('');
-  const [toastType, setToastType] = useState<'success' | 'error' | 'info'>('success');
-  const [loadingIds, setLoadingIds] = useState(new Set<string | number>());
-
-  const getStatusBadge = (status: string) => {
-    if (status === 'Verified') {
-      return <span className="px-3 py-1 bg-green-100 text-green-700 text-xs font-semibold rounded-full flex items-center gap-1 w-fit"><Check size={12} />Verified</span>;
-    }
-    if (status === 'Pending') {
-      return <span className="px-3 py-1 bg-yellow-100 text-yellow-700 text-xs font-semibold rounded-full flex items-center gap-1 w-fit"><Clock size={12} />Pending</span>;
-    }
-    return <span className="px-3 py-1 bg-red-100 text-red-700 text-xs font-semibold rounded-full flex items-center gap-1 w-fit"><X size={12} />Rejected</span>;
+interface VendorRecord {
+  id: string;
+  name: string;
+  slug: string;
+  tier: string;
+  isActive: boolean;
+  location?: string;
+  phone?: string;
+  productsCount: number;
+  ordersCount: number;
+  revenue: number;
+  createdAt: string;
+  user?: {
+    name: string;
+    email: string;
+    phone?: string;
+    kycStatus: string;
   };
+}
 
-  const showToast = (message: string, variant: 'success' | 'error' = 'success') => {
-    setToastMessage(message);
-    setToastType(variant === 'error' ? 'error' : 'success');
-    setToastOpen(true);
-  };
+function VendorsContent() {
+  const searchParams = useSearchParams();
+  const statusParam = searchParams.get('status');
 
-  const handleAction = useCallback(async (vendorId: string, action: string, vendorName: string) => {
-    setActionModal({ isOpen: true, type: action, vendorId, vendorName });
-  }, []);
+  const [vendors, setVendors] = useState<VendorRecord[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [search, setSearch] = useState('');
+  const [activeFilter, setActiveFilter] = useState(
+    statusParam === 'pending' ? 'false' : 'ALL'
+  );
+  const [tierFilter, setTierFilter] = useState('ALL');
+  const [page, setPage] = useState(1);
+  const [totalPages, setTotalPages] = useState(1);
+  const [totalVendors, setTotalVendors] = useState(0);
 
-  const confirmAction = useCallback(async () => {
-    const { vendorId, type } = actionModal;
-    
-    setLoadingIds(prev => new Set(prev).add(vendorId));
-
+  const fetchVendors = useCallback(async () => {
     try {
-      const result = await performAction('vendor', vendorId, type, 'admin');
+      setLoading(true);
+      const token = localStorage.getItem('auth_token');
+      const headers: Record<string, string> = token ? { Authorization: `Bearer ${token}` } : {};
 
-      if (result.success) {
-        // Update local state
-        setVendors(prev =>
-          prev.map(v =>
-            v.id === vendorId
-              ? {
-                  ...v,
-                  status:
-                    type === 'approve'
-                      ? 'Verified'
-                      : type === 'reject'
-                      ? 'Rejected'
-                      : type === 'activate'
-                      ? 'Verified'
-                      : 'Inactive',
-                }
-              : v
-          )
-        );
 
-        showToast(`Vendor ${type}d successfully`, 'success');
-        setActionModal({ isOpen: false, type: '', vendorId: '', vendorName: '' });
-      } else {
-        showToast(result.error || `Failed to ${type} vendor`, 'error');
+      const params = new URLSearchParams();
+      params.set('page', page.toString());
+      params.set('pageSize', '10');
+      if (search) params.set('search', search);
+      if (activeFilter !== 'ALL') params.set('isActive', activeFilter);
+      if (tierFilter !== 'ALL') params.set('tier', tierFilter);
+
+      const res = await fetch(`/api/admin/vendors?${params.toString()}`, { headers });
+      if (res.ok) {
+        const json = await res.json();
+        const vendorList = Array.isArray(json.data)
+          ? json.data
+          : Array.isArray(json.data?.data)
+          ? json.data.data
+          : Array.isArray(json.vendors)
+          ? json.vendors
+          : [];
+        setVendors(vendorList);
+
+        const pag = json.pagination || json.data?.pagination;
+        if (pag) {
+          setTotalPages(pag.totalPages || 1);
+          setTotalVendors(pag.total || vendorList.length || 0);
+        } else {
+          setTotalVendors(vendorList.length);
+        }
       }
-    } catch (error) {
-      showToast(`Error: ${error instanceof Error ? error.message : 'Unknown error'}`, 'error');
+    } catch (err) {
+      console.error('Failed to fetch vendors:', err);
     } finally {
-      setLoadingIds(prev => {
-        const next = new Set(prev);
-        next.delete(vendorId);
-        return next;
-      });
+      setLoading(false);
     }
-  }, [actionModal, performAction]);
+  }, [page, search, activeFilter, tierFilter]);
 
-  if (!isAllowed) return null;
+  useEffect(() => {
+    fetchVendors();
+  }, [fetchVendors]);
 
-  return (
-    <div className="flex h-screen bg-slate-50">
-      <main className="flex-1 overflow-y-auto lg:ml-64 pt-20 lg:pt-0">
-        <div className="p-6 max-w-7xl mx-auto">
-          <h1 className="text-3xl font-black text-slate-900 mb-2">Vendors Management</h1>
-          <p className="text-slate-600 mb-8">Manage vendor accounts and approvals</p>
+  const formatAED = (amount: number = 0) => {
+    return new Intl.NumberFormat('en-AE', {
+      style: 'currency',
+      currency: 'AED',
+      minimumFractionDigits: 0,
+      maximumFractionDigits: 2,
+    }).format(amount);
+  };
 
-          <div className="bg-white rounded-2xl border border-slate-200 overflow-hidden">
-            <table className="w-full text-sm">
-              <thead className="bg-slate-50 border-b border-slate-200">
-                <tr>
-                  <th className="px-6 py-4 text-left font-semibold text-slate-600">Vendor Name</th>
-                  <th className="px-6 py-4 text-left font-semibold text-slate-600">Owner</th>
-                  <th className="px-6 py-4 text-left font-semibold text-slate-600">Status</th>
-                  <th className="px-6 py-4 text-left font-semibold text-slate-600">Orders</th>
-                  <th className="px-6 py-4 text-left font-semibold text-slate-600">Rating</th>
-                  <th className="px-6 py-4 text-left font-semibold text-slate-600">Actions</th>
-                </tr>
-              </thead>
-              <tbody>
-                {vendors.map((vendor) => (
-                  <tr key={vendor.id} className={`border-b border-slate-200 hover:bg-slate-50 transition ${loadingIds.has(vendor.id) ? 'opacity-60' : ''}`}>
-                    <td className="px-6 py-4 font-semibold text-slate-900 flex items-center gap-2">
-                      <Store size={16} className="text-amber-600" />
-                      {vendor.name}
-                    </td>
-                    <td className="px-6 py-4 text-slate-600 flex items-center gap-2">
-                      <User size={14} />
-                      {vendor.owner}
-                    </td>
-                    <td className="px-6 py-4">{getStatusBadge(vendor.status)}</td>
-                    <td className="px-6 py-4 font-semibold text-slate-900">{vendor.orders}</td>
-                    <td className="px-6 py-4 font-semibold text-amber-600">{vendor.rating || 'N/A'}</td>
-                    <td className="px-6 py-4">
-                      <div className="flex gap-2 flex-wrap">
-                        {vendor.status === 'Verified' && (
-                          <>
-                            <button
-                              onClick={() => handleAction(vendor.id.toString(), 'deactivate', vendor.name)}
-                              disabled={loadingIds.has(vendor.id)}
-                              className="px-3 py-1 bg-yellow-100 text-yellow-600 text-xs font-semibold rounded hover:bg-yellow-200 transition disabled:opacity-50"
-                            >
-                              Deactivate
-                            </button>
-                            <button
-                              onClick={() => handleAction(vendor.id.toString(), 'delete', vendor.name)}
-                              disabled={loadingIds.has(vendor.id)}
-                              className="px-3 py-1 bg-red-100 text-red-600 text-xs font-semibold rounded hover:bg-red-200 transition disabled:opacity-50 flex items-center gap-1"
-                            >
-                              <Trash2 size={12} /> Delete
-                            </button>
-                          </>
-                        )}
-                        {vendor.status === 'Pending' && (
-                          <>
-                            <button
-                              onClick={() => handleAction(vendor.id.toString(), 'approve', vendor.name)}
-                              disabled={loadingIds.has(vendor.id)}
-                              className="px-3 py-1 bg-green-100 text-green-600 text-xs font-semibold rounded hover:bg-green-200 transition disabled:opacity-50"
-                            >
-                              Approve
-                            </button>
-                            <button
-                              onClick={() => handleAction(vendor.id.toString(), 'reject', vendor.name)}
-                              disabled={loadingIds.has(vendor.id)}
-                              className="px-3 py-1 bg-red-100 text-red-600 text-xs font-semibold rounded hover:bg-red-200 transition disabled:opacity-50"
-                            >
-                              Reject
-                            </button>
-                          </>
-                        )}
-                        {vendor.status === 'Rejected' && (
-                          <button
-                            onClick={() => handleAction(vendor.id.toString(), 'activate', vendor.name)}
-                            disabled={loadingIds.has(vendor.id)}
-                            className="px-3 py-1 bg-blue-100 text-blue-600 text-xs font-semibold rounded hover:bg-blue-200 transition disabled:opacity-50"
-                          >
-                            Reactivate
-                          </button>
-                        )}
-                      </div>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+  const columns: Column<VendorRecord>[] = [
+    {
+      header: 'Business Name',
+      cell: (row) => (
+        <div className="flex items-center gap-3">
+          <div className="w-10 h-10 rounded-xl bg-purple-50 text-[#74189B] border border-purple-100 flex items-center justify-center flex-shrink-0 font-bold text-xs">
+            <Store className="w-5 h-5" />
+          </div>
+          <div>
+            <Link
+              href={`/admin/vendors/${row.id}`}
+              className="font-bold text-[#29252B] hover:text-[#74189B] transition block"
+            >
+              {row.name}
+            </Link>
+            <p className="text-[11px] text-[#716975] font-mono">/{row.slug}</p>
           </div>
         </div>
-      </main>
+      ),
+    },
+    {
+      header: 'Owner',
+      cell: (row) => (
+        <div>
+          <p className="font-bold text-[#29252B]">{row.user?.name || 'Owner'}</p>
+          <p className="text-[11px] text-[#716975]">{row.user?.email}</p>
+        </div>
+      ),
+    },
+    {
+      header: 'Tier',
+      cell: (row) => (
+        <span className="px-2.5 py-0.5 rounded-full bg-[#FAF8FB] border border-[#E9E3EB] text-[10px] font-black text-[#74189B] uppercase">
+          {row.tier}
+        </span>
+      ),
+    },
+    {
+      header: 'Products',
+      cell: (row) => <span className="font-bold">{row.productsCount}</span>,
+    },
+    {
+      header: 'Orders',
+      cell: (row) => <span className="font-bold">{row.ordersCount}</span>,
+    },
+    {
+      header: 'Revenue',
+      cell: (row) => (
+        <span className="font-black text-[#29252B]">
+          {formatAED(row.revenue)}
+        </span>
+      ),
+    },
+    {
+      header: 'Status',
+      cell: (row) => (
+        <StatusBadge status={row.isActive ? 'APPROVED' : 'PENDING'} />
+      ),
+    },
+    {
+      header: 'Actions',
+      className: 'text-right',
+      cell: (row) => (
+        <div className="flex items-center justify-end">
+          <Link
+            href={`/admin/vendors/${row.id}`}
+            className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg bg-[#FAF8FB] hover:bg-[#74189B] text-[#74189B] hover:text-white border border-[#E9E3EB] text-xs font-bold transition shadow-xs"
+          >
+            <Eye className="w-3.5 h-3.5" />
+            <span>Manage</span>
+          </Link>
+        </div>
+      ),
+    },
+  ];
 
-      <ActionModal
-        isOpen={actionModal.isOpen}
-        onClose={() => setActionModal({ isOpen: false, type: '', vendorId: '', vendorName: '' })}
-        title={`${actionModal.type.charAt(0).toUpperCase() + actionModal.type.slice(1)} Vendor`}
-        message={`Are you sure you want to ${actionModal.type} this vendor?`}
-        actionType={actionModal.type}
-        itemName={actionModal.vendorName}
-        isDangerous={actionModal.type === 'reject' || actionModal.type === 'delete' || actionModal.type === 'deactivate'}
-        onConfirm={confirmAction}
+  return (
+    <div className="space-y-6 pb-12">
+      {/* Header */}
+      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+        <div>
+          <div className="flex items-center gap-2">
+            <h1 className="text-2xl font-black text-[#29252B] tracking-tight">
+              Vendors Directory
+            </h1>
+            <span className="px-2.5 py-0.5 rounded-full bg-[#74189B]/10 text-[#74189B] text-xs font-bold border border-[#74189B]/20">
+              {totalVendors} Vendors
+            </span>
+          </div>
+          <p className="text-xs text-[#716975] mt-1">
+            Registered sheesha providers, rental specialists, and event partners across UAE.
+          </p>
+        </div>
+
+        <Link
+          href="/admin/vendors/documents"
+          className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-white hover:bg-slate-50 border border-[#E9E3EB] text-xs font-bold text-[#74189B] transition shadow-xs"
+        >
+          <FileText className="w-4 h-4" />
+          <span>Verification Documents</span>
+        </Link>
+      </div>
+
+      {/* Filter Bar */}
+      <div className="flex items-center gap-3 flex-wrap">
+        <select
+          value={activeFilter}
+          onChange={(e) => {
+            setActiveFilter(e.target.value);
+            setPage(1);
+          }}
+          className="px-3 py-1.5 bg-white border border-[#E9E3EB] rounded-xl text-xs font-semibold text-[#29252B] focus:outline-none focus:border-[#74189B]"
+        >
+          <option value="ALL">All Vendor Statuses</option>
+          <option value="true">Active / Approved</option>
+          <option value="false">Pending Approval</option>
+        </select>
+
+        <select
+          value={tierFilter}
+          onChange={(e) => {
+            setTierFilter(e.target.value);
+            setPage(1);
+          }}
+          className="px-3 py-1.5 bg-white border border-[#E9E3EB] rounded-xl text-xs font-semibold text-[#29252B] focus:outline-none focus:border-[#74189B]"
+        >
+          <option value="ALL">All Tiers</option>
+          <option value="SOLO">Solo Tier</option>
+          <option value="MASTER">Master Tier</option>
+          <option value="ADVANCED">Advanced Tier</option>
+        </select>
+      </div>
+
+      {/* Table */}
+      <DataTable
+        columns={columns}
+        data={vendors}
+        loading={loading}
+        emptyTitle="No vendors found"
+        emptyDescription="Vendor applications will appear here as partners apply to join."
+        searchPlaceholder="Search vendor name, owner, email..."
+        searchValue={search}
+        onSearchChange={(val) => {
+          setSearch(val);
+          setPage(1);
+        }}
+        currentPage={page}
+        totalPages={totalPages}
+        totalItems={totalVendors}
+        onPageChange={setPage}
       />
-
-      <Toast open={toastOpen} message={toastMessage} variant={toastType} onClose={() => setToastOpen(false)} />
     </div>
+  );
+}
+
+export default function AdminVendorsPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="p-8 text-center text-[#716975] text-sm animate-pulse">
+          Loading vendors directory...
+        </div>
+      }
+    >
+      <VendorsContent />
+    </Suspense>
   );
 }

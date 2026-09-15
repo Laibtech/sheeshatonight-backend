@@ -15,14 +15,24 @@ export interface AuthenticatedRequest extends NextRequest {
   };
 }
 
+export function getTokenFromRequest(req: NextRequest): string | null {
+  const authHeader = req.headers.get('Authorization');
+  const tokenFromHeader = extractToken(authHeader || '');
+  if (tokenFromHeader) return tokenFromHeader;
+
+  const cookieToken = req.cookies.get('auth_token')?.value;
+  if (cookieToken) return cookieToken;
+
+  return null;
+}
+
 /**
  * Middleware to check authentication
  */
-export function withAuth(handler: (req: AuthenticatedRequest) => Promise<NextResponse>) {
-  return async (req: AuthenticatedRequest) => {
+export function withAuth(handler: (req: AuthenticatedRequest, ...args: any[]) => Promise<NextResponse>) {
+  return async (req: AuthenticatedRequest, ...args: any[]) => {
     try {
-      const authHeader = req.headers.get('Authorization');
-      const token = extractToken(authHeader || '');
+      const token = getTokenFromRequest(req);
 
       if (!token) {
         return NextResponse.json(
@@ -40,7 +50,7 @@ export function withAuth(handler: (req: AuthenticatedRequest) => Promise<NextRes
       }
 
       req.user = decoded;
-      return handler(req);
+      return handler(req, ...args);
     } catch (error) {
       return NextResponse.json(
         { error: 'Internal server error' },
@@ -53,45 +63,45 @@ export function withAuth(handler: (req: AuthenticatedRequest) => Promise<NextRes
 /**
  * Middleware to check if user is admin
  */
-export function withAdmin(handler: (req: AuthenticatedRequest) => Promise<NextResponse>) {
-  return withAuth(async (req: AuthenticatedRequest) => {
+export function withAdmin(handler: (req: AuthenticatedRequest, ...args: any[]) => Promise<NextResponse>) {
+  return withAuth(async (req: AuthenticatedRequest, ...args: any[]) => {
     if (req.user?.role !== 'ADMIN') {
       return NextResponse.json(
         { error: 'Forbidden: Admin role required' },
         { status: 403 }
       );
     }
-    return handler(req);
+    return handler(req, ...args);
   });
 }
 
 /**
  * Middleware to check if user is admin or staff
  */
-export function withAdminOrStaff(handler: (req: AuthenticatedRequest) => Promise<NextResponse>) {
-  return withAuth(async (req: AuthenticatedRequest) => {
+export function withAdminOrStaff(handler: (req: AuthenticatedRequest, ...args: any[]) => Promise<NextResponse>) {
+  return withAuth(async (req: AuthenticatedRequest, ...args: any[]) => {
     if (req.user?.role !== 'ADMIN' && req.user?.role !== 'STAFF') {
       return NextResponse.json(
         { error: 'Forbidden: Admin or Staff role required' },
         { status: 403 }
       );
     }
-    return handler(req);
+    return handler(req, ...args);
   });
 }
 
 /**
  * Middleware to check if user is vendor
  */
-export function withVendor(handler: (req: AuthenticatedRequest) => Promise<NextResponse>) {
-  return withAuth(async (req: AuthenticatedRequest) => {
-    if (req.user?.role !== 'VENDOR') {
+export function withVendor(handler: (req: AuthenticatedRequest, ...args: any[]) => Promise<NextResponse>) {
+  return withAuth(async (req: AuthenticatedRequest, ...args: any[]) => {
+    if (req.user?.role !== 'VENDOR' && req.user?.role !== 'ADMIN') {
       return NextResponse.json(
         { error: 'Forbidden: Vendor role required' },
         { status: 403 }
       );
     }
-    return handler(req);
+    return handler(req, ...args);
   });
 }
 
@@ -145,7 +155,7 @@ export function successResponse(data: any, messageOrStatus: string | number = 20
 /**
  * Set auth cookie
  */
-export function setAuthCookie(token: string, response: NextResponse) {
+export function setAuthCookie(token: string, response: NextResponse, role?: string) {
   response.cookies.set('auth_token', token, {
     httpOnly: true,
     secure: process.env.NODE_ENV === 'production',
@@ -153,6 +163,18 @@ export function setAuthCookie(token: string, response: NextResponse) {
     maxAge: 60 * 60 * 24 * 7, // 7 days
     path: '/',
   });
+  
+  // Also set user_role cookie for client-side routing
+  if (role) {
+    response.cookies.set('user_role', role, {
+      httpOnly: false, // Allow JavaScript to read this
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: 'lax',
+      maxAge: 60 * 60 * 24 * 7, // 7 days
+      path: '/',
+    });
+  }
+  
   return response;
 }
 
@@ -167,5 +189,15 @@ export function clearAuthCookie(response: NextResponse) {
     maxAge: 0,
     path: '/',
   });
+  
+  // Also clear user_role cookie
+  response.cookies.set('user_role', '', {
+    httpOnly: false,
+    secure: process.env.NODE_ENV === 'production',
+    sameSite: 'lax',
+    maxAge: 0,
+    path: '/',
+  });
+  
   return response;
 }

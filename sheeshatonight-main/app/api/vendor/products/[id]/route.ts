@@ -7,9 +7,11 @@ import { updateProductSchema } from '@/lib/validation';
 import { createAuditLog } from '@/lib/utils';
 
 async function getAuthenticatedVendor(request: Request | NextRequest) {
-  // Extract token from cookies
+  const authorization = request.headers.get('authorization');
+  const bearerToken = authorization?.startsWith('Bearer ') ? authorization.slice(7) : null;
   const cookieHeader = request.headers.get('cookie');
-  const token = cookieHeader?.split('; ').find(c => c.startsWith('auth_token='))?.split('=')[1];
+  const cookieToken = cookieHeader?.split('; ').find(c => c.startsWith('auth_token='))?.split('=')[1];
+  const token = bearerToken || cookieToken;
 
   if (!token || !verifyToken(token)) {
     return null;
@@ -101,7 +103,7 @@ export async function DELETE(request: Request, { params }: { params: { id: strin
 
     await prisma.product.update({
       where: { id: params.id },
-      data: { deletedAt: new Date() },
+      data: { deletedAt: new Date(), isActive: false },
     });
 
     await createAuditLog(user.id, 'PRODUCT_DELETED', 'Product', params.id, product, null, request as NextRequest);

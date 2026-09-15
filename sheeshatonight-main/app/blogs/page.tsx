@@ -167,7 +167,7 @@ export default function BlogsPage() {
       </header>
 
       {/* Hero Section */}
-      <section className="pt-32 pb-16 bg-gradient-to-br from-[#D4AF37]/10 to-[#B8902A]/5">
+      <section className="site-page-hero">
         <div className="container mx-auto px-6 text-center">
           <h1 className="text-5xl md:text-6xl font-bold text-slate-900 mb-6">
             Our <span className="text-[#D4AF37]">Blog</span>

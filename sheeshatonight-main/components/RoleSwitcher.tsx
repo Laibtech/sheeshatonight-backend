@@ -26,7 +26,8 @@ export const RoleSwitcher: React.FC<RoleSwitcherProps> = ({ onRoleChange }) => {
       const routeMap: Record<UserRole, string> = {
         CUSTOMER: '/dashboard',
         VENDOR: '/vendor/dashboard',
-        ADMIN: '/admin/dashboard',
+        ADMIN: '/admin',
+        SUPER_ADMIN: '/admin',
       };
       router.push(routeMap[role]);
     }

@@ -1,206 +1,388 @@
 'use client';
 
-import { Calendar, Clock, MapPin, User, ArrowUpRight, CheckCircle, XCircle } from 'lucide-react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import {
+  Calendar,
+  Clock,
+  Loader2,
+  MapPin,
+  Package,
+  RefreshCw,
+  Store,
+  FileText,
+  CheckCircle,
+  AlertCircle,
+  Phone,
+} from 'lucide-react';
+import Link from 'next/link';
+import { TaxInvoiceModal, TaxInvoiceData } from '@/components/TaxInvoiceModal';
+
+interface BookingItem {
+  id?: string;
+  product?: {
+    id: string;
+    title: string;
+    type?: string;
+  };
+  quantity: number;
+  price?: number;
+}
+
+interface Booking {
+  id: string;
+  orderNumber?: string;
+  status: string;
+  totalAmount: number;
+  currency: string;
+  createdAt: string;
+  rentalStartDate: string | null;
+  rentalEndDate: string | null;
+  notes?: string | null;
+  vendor?: {
+    id: string;
+    name: string;
+    phone?: string;
+  };
+  items?: BookingItem[];
+  invoice?: {
+    id: string;
+    invoiceNumber: string;
+    issuedAt: string;
+  };
+}
+
+function getAuthToken(): string | null {
+  if (typeof window === 'undefined') return null;
+  const token = localStorage.getItem('auth_token');
+  if (token) return token;
+  const match = document.cookie.match(/(?:^|; )auth_token=([^;]*)/);
+  return match && match[1] ? decodeURIComponent(match[1]) : null;
+}
+
+function formatAmount(value: unknown, currency = 'AED') {
+  const amount = Number(value);
+  return Number.isFinite(amount) ? `${currency} ${amount.toFixed(2)}` : 'AED 0.00';
+}
+
+function formatDate(value: string | null) {
+  if (!value) return 'Date unavailable';
+  const date = new Date(value);
+  return Number.isNaN(date.getTime())
+    ? 'Date unavailable'
+    : date.toLocaleDateString('en-AE', {
+        day: 'numeric',
+        month: 'short',
+        year: 'numeric',
+      });
+}
+
+function formatStatus(status: string) {
+  return status.replace(/_/g, ' ').replace(/\b\w/g, (letter) => letter.toUpperCase());
+}
 
 export default function BookingsPage() {
-  const bookings = [
-    {
-      id: 'BK-001',
-      lounge: 'Cloud Nine Lounge',
-      date: '2024-06-15',
-      time: '7:00 PM - 10:00 PM',
-      guests: 4,
-      status: 'confirmed',
-      address: 'Dubai Marina, Tower 5',
-      amount: 'AED 450',
-    },
-    {
-      id: 'BK-002',
-      lounge: 'Sultan Sheesha Palace',
-      date: '2024-06-18',
-      time: '8:30 PM - 11:30 PM',
-      guests: 6,
-      status: 'pending',
-      address: 'Downtown Dubai, Level 2',
-      amount: 'AED 650',
-    },
-    {
-      id: 'BK-003',
-      lounge: 'Royal Palace Sheesha',
-      date: '2024-06-12',
-      time: '6:00 PM - 9:00 PM',
-      guests: 2,
-      status: 'completed',
-      address: 'Palm Jumeirah, Villa 12',
-      amount: 'AED 800',
-    },
-  ];
+  const [bookings, setBookings] = useState<Booking[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  // Invoice modal state
+  const [selectedInvoice, setSelectedInvoice] = useState<TaxInvoiceData | null>(null);
+  const [isInvoiceOpen, setIsInvoiceOpen] = useState(false);
+
+  const fetchBookings = useCallback(async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const token = getAuthToken();
+      const headers: HeadersInit = token ? { Authorization: `Bearer ${token}` } : {};
+      const response = await fetch('/api/bookings', { headers, cache: 'no-store' });
+      const result = await response.json();
+      if (!response.ok || !result.success || !Array.isArray(result.data)) {
+        throw new Error(result.error || 'Unable to load bookings.');
+      }
+      setBookings(result.data);
+    } catch (fetchError) {
+      console.error('Failed to fetch bookings:', fetchError);
+      setError(fetchError instanceof Error ? fetchError.message : 'Unable to load bookings.');
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    fetchBookings();
+  }, [fetchBookings]);
+
+  const upcomingCount = useMemo(
+    () =>
+      bookings.filter((booking) => {
+        const start = booking.rentalStartDate ? new Date(booking.rentalStartDate).getTime() : 0;
+        return start >= Date.now() && booking.status !== 'CANCELLED';
+      }).length,
+    [bookings]
+  );
+
+  const currentMonthCount = useMemo(
+    () =>
+      bookings.filter((booking) => {
+        const date = new Date(booking.createdAt);
+        const now = new Date();
+        return date.getFullYear() === now.getFullYear() && date.getMonth() === now.getMonth();
+      }).length,
+    [bookings]
+  );
+
+  const totalSpent = bookings.reduce((sum, booking) => {
+    const amount = Number(booking.totalAmount);
+    return Number.isFinite(amount) ? sum + amount : sum;
+  }, 0);
+
+  const openInvoiceForBooking = (booking: Booking) => {
+    const total = Number(booking.totalAmount || 0);
+    const subtotal = total / 1.05;
+    const tax = total - subtotal;
+
+    const data: TaxInvoiceData = {
+      id: booking.invoice?.id || booking.id,
+      invoiceNumber: booking.invoice?.invoiceNumber || `INV-${booking.orderNumber || booking.id.substring(0, 8)}`,
+      orderNumber: booking.orderNumber || booking.id.substring(0, 8),
+      orderId: booking.id,
+      issuedAt: booking.invoice?.issuedAt || booking.createdAt,
+      status: booking.status,
+      paymentMethod: 'Cash / Card on Delivery',
+      customer: {
+        name: 'Customer',
+        email: '',
+        address: 'Dubai, UAE',
+        city: 'Dubai',
+      },
+      vendor: {
+        name: booking.vendor?.name || 'SheeshaTonight Certified Partner',
+        location: 'Dubai, UAE',
+        phone: booking.vendor?.phone,
+      },
+      items:
+        booking.items && booking.items.length > 0
+          ? booking.items.map((it) => ({
+              title: it.product?.title || 'Premium Sheesha Rental Equipment',
+              quantity: it.quantity || 1,
+              price: Number(it.price || subtotal),
+              total: Number(it.price || subtotal) * (it.quantity || 1),
+            }))
+          : [
+              {
+                title: 'Sheesha Rental & Session Package',
+                quantity: 1,
+                price: subtotal,
+                total: subtotal,
+              },
+            ],
+      subtotal,
+      tax,
+      total,
+    };
+
+    setSelectedInvoice(data);
+    setIsInvoiceOpen(true);
+  };
 
   const getStatusBadge = (status: string) => {
-    switch (status) {
-      case 'confirmed':
+    switch (status.toUpperCase()) {
+      case 'ACTIVE_RENTAL':
         return (
-          <span className="px-3 py-1 bg-green-100 text-green-700 text-xs font-semibold rounded-full flex items-center gap-1.5">
-            <CheckCircle className="w-3 h-3" />
-            Confirmed
-          </span>
-        );
-      case 'pending':
-        return (
-          <span className="px-3 py-1 bg-amber-100 text-amber-700 text-xs font-semibold rounded-full flex items-center gap-1.5">
+          <span className="px-3 py-1 bg-purple-100 text-purple-700 text-xs font-bold rounded-full flex items-center gap-1.5">
             <Clock className="w-3 h-3" />
-            Pending
+            Active Rental
           </span>
         );
-      case 'completed':
+      case 'DELIVERED':
+      case 'COMPLETED':
         return (
-          <span className="px-3 py-1 bg-slate-100 text-slate-700 text-xs font-semibold rounded-full flex items-center gap-1.5">
+          <span className="px-3 py-1 bg-emerald-100 text-emerald-700 text-xs font-bold rounded-full flex items-center gap-1.5">
             <CheckCircle className="w-3 h-3" />
             Completed
           </span>
         );
-      case 'cancelled':
+      case 'PREPARING':
+      case 'READY_FOR_PICKUP':
         return (
-          <span className="px-3 py-1 bg-red-100 text-red-700 text-xs font-semibold rounded-full flex items-center gap-1.5">
-            <XCircle className="w-3 h-3" />
+          <span className="px-3 py-1 bg-amber-100 text-amber-700 text-xs font-bold rounded-full flex items-center gap-1.5">
+            <Clock className="w-3 h-3" />
+            {formatStatus(status)}
+          </span>
+        );
+      case 'CANCELLED':
+        return (
+          <span className="px-3 py-1 bg-red-100 text-red-700 text-xs font-bold rounded-full">
             Cancelled
           </span>
         );
       default:
-        return null;
+        return (
+          <span className="px-3 py-1 bg-slate-100 text-slate-700 text-xs font-bold rounded-full">
+            {formatStatus(status)}
+          </span>
+        );
     }
   };
 
-  return (
-    <div className="p-6 bg-slate-50 min-h-full">
-      {/* Header - CONSISTENT */}
-      <div className="mb-6">
-        <h1 className="text-2xl font-bold text-slate-900 flex items-center gap-2">
-          <Calendar className="w-6 h-6 text-[#D4AF37]" />
-          My Bookings
-        </h1>
-        <p className="text-slate-600 text-sm mt-1">Manage your upcoming and past reservations</p>
-      </div>
-
-      {/* Stats - CONSISTENT */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
-        <div className="bg-white rounded-xl p-6 border border-slate-200">
-          <div className="flex items-center justify-between mb-2">
-            <p className="text-xs text-slate-500 font-medium">Upcoming</p>
-            <div className="w-8 h-8 bg-amber-50 rounded-lg flex items-center justify-center">
-              <Calendar className="w-4 h-4 text-[#D4AF37]" />
-            </div>
-          </div>
-          <p className="text-2xl font-bold text-slate-900">2</p>
-          <p className="text-xs text-slate-500 mt-1">Confirmed reservations</p>
-        </div>
-
-        <div className="bg-white rounded-xl p-6 border border-slate-200">
-          <div className="flex items-center justify-between mb-2">
-            <p className="text-xs text-slate-500 font-medium">This Month</p>
-            <div className="w-8 h-8 bg-amber-50 rounded-lg flex items-center justify-center">
-              <Clock className="w-4 h-4 text-amber-600" />
-            </div>
-          </div>
-          <p className="text-2xl font-bold text-slate-900">5</p>
-          <p className="text-xs text-slate-500 mt-1">Total bookings</p>
-        </div>
-
-        <div className="bg-white rounded-xl p-6 border border-slate-200">
-          <div className="flex items-center justify-between mb-2">
-            <p className="text-xs text-slate-500 font-medium">Total Spent</p>
-            <div className="w-8 h-8 bg-green-50 rounded-lg flex items-center justify-center">
-              <User className="w-4 h-4 text-green-600" />
-            </div>
-          </div>
-          <p className="text-2xl font-bold text-slate-900">AED 2,450</p>
-          <p className="text-xs text-slate-500 mt-1">On reservations</p>
+  if (loading) {
+    return (
+      <div className="p-8 min-h-full bg-slate-50 flex items-center justify-center">
+        <div className="text-center">
+          <Loader2 className="w-8 h-8 text-[#D4AF37] animate-spin mx-auto mb-3" />
+          <p className="text-sm text-slate-500 font-semibold">Loading rental bookings...</p>
         </div>
       </div>
+    );
+  }
 
-      {/* Bookings List - CONSISTENT CARDS */}
-      <div className="space-y-4">
-        {bookings.map((booking) => (
-          <div
-            key={booking.id}
-            className="bg-white rounded-xl p-6 border border-slate-200 hover:shadow-md transition-shadow"
+  if (error) {
+    return (
+      <div className="p-8 min-h-full bg-slate-50 flex items-center justify-center">
+        <div className="bg-white border border-red-200 rounded-2xl p-8 text-center max-w-md shadow-sm">
+          <AlertCircle className="w-10 h-10 text-red-500 mx-auto mb-3" />
+          <h1 className="text-xl font-bold text-slate-900 mb-2">Bookings unavailable</h1>
+          <p className="text-sm text-slate-600 mb-5">{error}</p>
+          <button
+            onClick={fetchBookings}
+            className="inline-flex items-center gap-2 px-5 py-2.5 bg-[#D4AF37] text-white rounded-xl font-bold shadow-md hover:bg-[#b8902a] transition text-xs"
           >
-            <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
-              {/* Booking Info */}
-              <div className="flex-1">
-                <div className="flex items-center gap-3 mb-3">
-                  <h3 className="text-lg font-bold text-slate-900">{booking.id}</h3>
-                  {getStatusBadge(booking.status)}
-                </div>
-
-                <div className="space-y-2">
-                  <p className="text-slate-900 font-semibold">{booking.lounge}</p>
-                  
-                  <div className="flex flex-wrap gap-4 text-sm">
-                    <div className="flex items-center gap-1.5 text-slate-600">
-                      <Calendar className="w-4 h-4" />
-                      <span>{booking.date}</span>
-                    </div>
-                    <div className="flex items-center gap-1.5 text-slate-600">
-                      <Clock className="w-4 h-4" />
-                      <span>{booking.time}</span>
-                    </div>
-                    <div className="flex items-center gap-1.5 text-slate-600">
-                      <User className="w-4 h-4" />
-                      <span>{booking.guests} guests</span>
-                    </div>
-                  </div>
-
-                  <p className="text-sm text-slate-500 flex items-center gap-1.5">
-                    <MapPin className="w-3.5 h-3.5" />
-                    {booking.address}
-                  </p>
-                </div>
-              </div>
-
-              {/* Booking Actions */}
-              <div className="flex flex-col items-end gap-3">
-                <p className="text-2xl font-bold text-[#D4AF37]">{booking.amount}</p>
-                <div className="flex gap-2">
-                  {booking.status === 'confirmed' && (
-                    <>
-                      <button className="px-4 py-2 bg-slate-50 text-slate-700 hover:bg-slate-100 rounded-lg transition-colors font-medium text-sm flex items-center gap-1">
-                        View Details
-                        <ArrowUpRight className="w-3 h-3" />
-                      </button>
-                      <button className="px-4 py-2 bg-red-50 text-red-600 hover:bg-red-100 rounded-lg transition-colors font-medium text-sm">
-                        Cancel
-                      </button>
-                    </>
-                  )}
-                  {booking.status === 'pending' && (
-                    <button className="px-4 py-2 bg-amber-50 text-[#D4AF37] hover:bg-amber-100 rounded-lg transition-colors font-medium text-sm">
-                      Contact Support
-                    </button>
-                  )}
-                  {booking.status === 'completed' && (
-                    <button className="px-4 py-2 bg-amber-50 text-[#D4AF37] hover:bg-amber-100 rounded-lg transition-colors font-medium text-sm">
-                      Book Again
-                    </button>
-                  )}
-                </div>
-              </div>
-            </div>
-          </div>
-        ))}
-      </div>
-
-      {/* Empty State */}
-      {bookings.length === 0 && (
-        <div className="bg-white rounded-xl p-12 border border-slate-200 text-center">
-          <Calendar className="w-16 h-16 text-slate-300 mx-auto mb-4" />
-          <h3 className="text-xl font-bold text-slate-700 mb-2">No bookings yet</h3>
-          <p className="text-slate-500 mb-6">Start browsing to make your first reservation</p>
-          <button className="px-6 py-3 bg-[#D4AF37] text-white font-semibold rounded-xl hover:bg-[#B8902A] hover:shadow-lg transition-all">
-            Browse Lounges
+            <RefreshCw className="w-4 h-4" />
+            Retry
           </button>
         </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="p-6 md:p-8 bg-slate-50 min-h-full space-y-6">
+      {/* Header */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+        <div>
+          <h1 className="text-2xl font-bold text-slate-900 flex items-center gap-2">
+            <Calendar className="w-6 h-6 text-[#D4AF37]" />
+            My Bookings & Rentals
+          </h1>
+          <p className="text-slate-600 text-sm mt-1">
+            Track your sheesha rentals, delivery schedules, and session durations
+          </p>
+        </div>
+
+        <button
+          onClick={fetchBookings}
+          className="inline-flex items-center gap-2 px-4 py-2 bg-white border border-slate-200 text-slate-700 rounded-xl hover:bg-slate-50 font-medium text-xs transition shadow-2xs self-start sm:self-auto"
+        >
+          <RefreshCw className="w-3.5 h-3.5" />
+          <span>Refresh</span>
+        </button>
+      </div>
+
+      {/* Booking Stats Cards */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <div className="bg-white rounded-2xl p-6 border border-slate-200 shadow-2xs">
+          <p className="text-xs text-slate-500 font-bold uppercase tracking-wider">Upcoming Rentals</p>
+          <p className="text-3xl font-black text-slate-900 mt-2">{upcomingCount}</p>
+        </div>
+        <div className="bg-white rounded-2xl p-6 border border-slate-200 shadow-2xs">
+          <p className="text-xs text-slate-500 font-bold uppercase tracking-wider">This Month Bookings</p>
+          <p className="text-3xl font-black text-slate-900 mt-2">{currentMonthCount}</p>
+        </div>
+        <div className="bg-white rounded-2xl p-6 border border-slate-200 shadow-2xs">
+          <p className="text-xs text-slate-500 font-bold uppercase tracking-wider">Rental Total Spend</p>
+          <p className="text-3xl font-black text-slate-900 mt-2">{formatAmount(totalSpent)}</p>
+        </div>
+      </div>
+
+      {/* Bookings List */}
+      {bookings.length === 0 ? (
+        <div className="bg-white rounded-2xl p-12 border border-slate-200 text-center">
+          <Calendar className="w-14 h-14 text-slate-300 mx-auto mb-4" />
+          <h3 className="text-lg font-bold text-slate-800 mb-1">No bookings yet</h3>
+          <p className="text-slate-500 text-xs mb-6 max-w-sm mx-auto">
+            Book top-of-the-line sheeshas, premium coals, and fruit bowls delivered directly to your villa or gathering.
+          </p>
+          <Link
+            href="/dashboard/browse"
+            className="inline-flex px-5 py-2.5 bg-[#D4AF37] text-slate-950 font-bold rounded-xl text-xs hover:bg-[#b8902a] transition shadow-md"
+          >
+            Browse Sheesha & Book
+          </Link>
+        </div>
+      ) : (
+        <div className="space-y-4">
+          {bookings.map((booking) => (
+            <div
+              key={booking.id}
+              className="bg-white rounded-2xl p-6 border border-slate-200 hover:shadow-md transition"
+            >
+              <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-6">
+                <div className="flex-1 space-y-3">
+                  <div className="flex items-center gap-3">
+                    <h3 className="text-lg font-black text-slate-900 font-mono">
+                      #{booking.orderNumber || booking.id.substring(0, 10)}
+                    </h3>
+                    {getStatusBadge(booking.status)}
+                  </div>
+
+                  <div>
+                    <h4 className="font-bold text-slate-900 text-sm">
+                      {booking.items?.[0]?.product?.title || 'Sheesha Rental Package'}
+                    </h4>
+                    <p className="text-xs text-slate-600 mt-0.5 flex items-center gap-1.5">
+                      <Store className="w-3.5 h-3.5 text-[#D4AF37]" />
+                      Vendor: {booking.vendor?.name || 'SheeshaTonight Certified Vendor'}
+                      {booking.vendor?.phone && ` (${booking.vendor.phone})`}
+                    </p>
+                  </div>
+
+                  {/* Schedule Details */}
+                  <div className="flex flex-wrap gap-4 text-xs bg-slate-50 p-3 rounded-xl border border-slate-100">
+                    <span className="flex items-center gap-1.5 text-slate-700 font-medium">
+                      <Calendar className="w-3.5 h-3.5 text-[#D4AF37]" />
+                      <strong>Starts:</strong> {formatDate(booking.rentalStartDate)}
+                    </span>
+                    <span className="flex items-center gap-1.5 text-slate-700 font-medium">
+                      <Clock className="w-3.5 h-3.5 text-[#D4AF37]" />
+                      <strong>Ends:</strong> {formatDate(booking.rentalEndDate)}
+                    </span>
+                  </div>
+
+                  {booking.notes && (
+                    <p className="text-xs text-slate-500 italic">Notes: "{booking.notes}"</p>
+                  )}
+                </div>
+
+                {/* Amount and Action */}
+                <div className="flex flex-col sm:flex-row lg:flex-col items-start sm:items-center lg:items-end justify-between gap-4 pt-4 lg:pt-0 border-t lg:border-t-0 border-slate-100">
+                  <div className="text-left sm:text-right">
+                    <span className="text-[10px] uppercase font-bold text-slate-400">Total Rental Cost</span>
+                    <p className="text-2xl font-black text-[#D4AF37] font-mono">
+                      {formatAmount(booking.totalAmount, booking.currency)}
+                    </p>
+                  </div>
+
+                  <button
+                    onClick={() => openInvoiceForBooking(booking)}
+                    className="px-4 py-2 bg-[#74189B]/10 hover:bg-[#74189B]/20 text-[#74189B] rounded-xl font-bold text-xs flex items-center gap-1.5 transition shadow-2xs"
+                  >
+                    <FileText className="w-3.5 h-3.5" />
+                    <span>Tax Invoice</span>
+                  </button>
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
       )}
+
+      {/* Tax Invoice Modal */}
+      <TaxInvoiceModal
+        isOpen={isInvoiceOpen}
+        onClose={() => setIsInvoiceOpen(false)}
+        data={selectedInvoice}
+      />
     </div>
   );
 }

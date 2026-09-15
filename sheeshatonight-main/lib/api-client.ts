@@ -215,32 +215,105 @@ export const orderAPI = {
  * Admin API methods
  */
 export const adminAPI = {
-  /**
-   * Get admin dashboard stats
-   */
   async getStats(): Promise<ApiResponse> {
     return apiRequest('/admin/stats');
   },
 
-  async vendorAction(id: string, action: string): Promise<ApiResponse> {
-    return apiRequest(`/admin/vendors/${id}`, {
-      method: 'POST',
-      body: JSON.stringify({ vendorId: id, action }),
-    });
+  // Product CRUD
+  async getProducts(): Promise<ApiResponse> {
+    return apiRequest('/admin/products');
+  },
+  async createProduct(data: any): Promise<ApiResponse> {
+    return apiRequest('/admin/products', { method: 'POST', body: JSON.stringify(data) });
+  },
+  async updateProduct(id: string, data: any): Promise<ApiResponse> {
+    return apiRequest(`/admin/products/${id}`, { method: 'PATCH', body: JSON.stringify(data) });
+  },
+  async deleteProduct(id: string): Promise<ApiResponse> {
+    return apiRequest(`/admin/products/${id}`, { method: 'DELETE' });
   },
 
-  async productAction(id: string, action: string): Promise<ApiResponse> {
-    return apiRequest(`/admin/products/${id}`, {
-      method: 'POST',
-      body: JSON.stringify({ productId: id, action }),
-    });
+  // Category CRUD
+  async getCategories(): Promise<ApiResponse> {
+    return apiRequest('/admin/categories');
+  },
+  async createCategory(data: any): Promise<ApiResponse> {
+    return apiRequest('/admin/categories', { method: 'POST', body: JSON.stringify(data) });
+  },
+  async updateCategory(id: string, data: any): Promise<ApiResponse> {
+    return apiRequest(`/admin/categories/${id}`, { method: 'PATCH', body: JSON.stringify(data) });
+  },
+  async deleteCategory(id: string): Promise<ApiResponse> {
+    return apiRequest(`/admin/categories/${id}`, { method: 'DELETE' });
   },
 
-  async userAction(id: string, action: string): Promise<ApiResponse> {
-    return apiRequest(`/admin/users/${id}`, {
-      method: 'POST',
-      body: JSON.stringify({ userId: id, action }),
-    });
+  // Users / Customers
+  async getUsers(query?: any): Promise<ApiResponse> {
+    const q = query ? '?' + new URLSearchParams(query).toString() : '';
+    return apiRequest(`/admin/users${q}`);
+  },
+  async updateUser(id: string, data: any): Promise<ApiResponse> {
+    return apiRequest(`/admin/users/${id}`, { method: 'PATCH', body: JSON.stringify(data) });
+  },
+
+  // Vendors
+  async getVendors(query?: any): Promise<ApiResponse> {
+    const q = query ? '?' + new URLSearchParams(query).toString() : '';
+    return apiRequest(`/admin/vendors${q}`);
+  },
+  async updateVendor(id: string, data: any): Promise<ApiResponse> {
+    return apiRequest(`/admin/vendors/${id}`, { method: 'PATCH', body: JSON.stringify(data) });
+  },
+
+  // Orders
+  async getOrders(): Promise<ApiResponse> {
+    return apiRequest('/admin/orders');
+  },
+  async updateOrderStatus(id: string, status: string): Promise<ApiResponse> {
+    return apiRequest(`/admin/orders/${id}/status`, { method: 'PATCH', body: JSON.stringify({ status }) });
+  },
+
+  // Coupons
+  async getCoupons(): Promise<ApiResponse> {
+    return apiRequest('/admin/coupons');
+  },
+  async createCoupon(data: any): Promise<ApiResponse> {
+    return apiRequest('/admin/coupons', { method: 'POST', body: JSON.stringify(data) });
+  },
+  async updateCoupon(id: string, data: any): Promise<ApiResponse> {
+    return apiRequest(`/admin/coupons/${id}`, { method: 'PATCH', body: JSON.stringify(data) });
+  },
+  async deleteCoupon(id: string): Promise<ApiResponse> {
+    return apiRequest(`/admin/coupons/${id}`, { method: 'DELETE' });
+  },
+
+  // CMS
+  async getCmsBanners(): Promise<ApiResponse> {
+    return apiRequest('/admin/cms/banners');
+  },
+  async createCmsBanner(data: any): Promise<ApiResponse> {
+    return apiRequest('/admin/cms/banners', { method: 'POST', body: JSON.stringify(data) });
+  },
+  async updateCmsBanner(id: string, data: any): Promise<ApiResponse> {
+    return apiRequest(`/admin/cms/banners/${id}`, { method: 'PATCH', body: JSON.stringify(data) });
+  },
+  async deleteCmsBanner(id: string): Promise<ApiResponse> {
+    return apiRequest(`/admin/cms/banners/${id}`, { method: 'DELETE' });
+  },
+  async getCmsPages(): Promise<ApiResponse> {
+    return apiRequest('/admin/cms/pages');
+  },
+  async createCmsPage(data: any): Promise<ApiResponse> {
+    return apiRequest('/admin/cms/pages', { method: 'POST', body: JSON.stringify(data) });
+  },
+  async updateCmsPage(id: string, data: any): Promise<ApiResponse> {
+    return apiRequest(`/admin/cms/pages/${id}`, { method: 'PATCH', body: JSON.stringify(data) });
+  },
+  async getCmsContent(key: string): Promise<ApiResponse> {
+    return apiRequest(`/admin/cms/content/${key}`);
+  },
+  async updateCmsContent(key: string, value: any): Promise<ApiResponse> {
+    return apiRequest(`/admin/cms/content/${key}`, { method: 'POST', body: JSON.stringify(value) });
   },
 };
 

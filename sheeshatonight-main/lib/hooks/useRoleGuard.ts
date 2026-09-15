@@ -1,11 +1,11 @@
 'use client';
 
 // Middleware for role-based route protection
-import { useAuthStore } from '@/lib/store';
+import { useAuthStore, UserRole } from '@/lib/store';
 import { useRouter } from 'next/navigation';
 import { useEffect } from 'react';
 
-export function useRoleGuard(allowedRoles: ('CUSTOMER' | 'VENDOR' | 'ADMIN')[]) {
+export function useRoleGuard(allowedRoles: UserRole[]) {
   const router = useRouter();
   const { userRole, isLoggedIn } = useAuthStore();
 
@@ -16,12 +16,13 @@ export function useRoleGuard(allowedRoles: ('CUSTOMER' | 'VENDOR' | 'ADMIN')[]) 
     }
 
     if (!allowedRoles.includes(userRole)) {
-      const roleRoutes = {
+      const roleRoutes: Record<UserRole, string> = {
         CUSTOMER: '/dashboard',
         VENDOR: '/vendor/dashboard',
-        ADMIN: '/admin/dashboard',
+        ADMIN: '/admin',
+        SUPER_ADMIN: '/admin',
       };
-      router.push(roleRoutes[userRole]);
+      router.push(roleRoutes[userRole] || '/');
     }
   }, [userRole, isLoggedIn, router, allowedRoles]);
 

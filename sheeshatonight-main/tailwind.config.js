@@ -6,6 +6,10 @@ module.exports = {
   ],
   theme: {
     extend: {
+      fontFamily: {
+        sans: ['Montserrat', 'Plus Jakarta Sans', 'system-ui', '-apple-system', 'sans-serif'],
+        heading: ['Montserrat', 'sans-serif'],
+      },
       colors: {
         'luxury-dark': '#09090b',
         'luxury-card': '#18181b',

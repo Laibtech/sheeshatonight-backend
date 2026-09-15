@@ -100,7 +100,7 @@ export default function MakeYourSheesha() {
       </header>
 
       {/* Hero Section */}
-      <section className="pt-32 pb-12 bg-gradient-to-br from-[#D4AF37]/10 to-[#B8902A]/5">
+      <section className="site-page-hero site-page-hero-compact">
         <div className="container mx-auto px-6 text-center">
           <h1 className="text-5xl md:text-6xl font-bold text-slate-900 mb-6">
             Build Your <span className="text-[#D4AF37]">Custom Sheesha</span>

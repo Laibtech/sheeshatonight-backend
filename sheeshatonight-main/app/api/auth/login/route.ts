@@ -76,7 +76,7 @@ export async function POST(request: NextRequest) {
       { status: 200 }
     );
 
-    return setAuthCookie(token, response);
+    return setAuthCookie(token, response, user.role);
   } catch (error) {
     console.error('Login error:', error);
     return NextResponse.json(

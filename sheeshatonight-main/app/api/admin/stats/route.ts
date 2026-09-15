@@ -1,92 +1,123 @@
-import { NextRequest, NextResponse } from 'next/server';
-import { prisma } from '@/lib/db';
-import { verifyToken, extractToken } from '@/lib/jwt';
+import { NextResponse } from 'next/server';
+import { prisma } from '@/lib/prisma';
+import { withAdmin, AuthenticatedRequest } from '@/lib/middleware';
 
 /**
  * GET /api/admin/stats
- * Get admin dashboard statistics (admin only)
+ * Get comprehensive admin statistics from actual MySQL database
  */
-export async function GET(request: NextRequest) {
+export const GET = withAdmin(async (req: AuthenticatedRequest) => {
   try {
-    const authHeader = request.headers.get('Authorization');
-    const token = extractToken(authHeader || '');
-
-    if (!token) {
-      return NextResponse.json(
-        { error: 'Unauthorized: No token provided' },
-        { status: 401 }
-      );
-    }
-
-    const decoded = verifyToken(token);
-    if (!decoded) {
-      return NextResponse.json(
-        { error: 'Unauthorized: Invalid token' },
-        { status: 401 }
-      );
-    }
-
-    // Check if user is admin
-    if (decoded.role !== 'ADMIN') {
-      return NextResponse.json(
-        { error: 'Forbidden: Admin role required' },
-        { status: 403 }
-      );
-    }
-
-    // Get stats
-    const [totalUsers, totalVendors, totalCustomers, recentUsers] = await Promise.all([
+    const [
+      totalUsers,
+      totalVendors,
+      totalCustomers,
+      activeVendors,
+      pendingVendors,
+      totalProducts,
+      activeProducts,
+      lowStockProducts,
+      totalOrders,
+      pendingOrders,
+      processingOrders,
+      shippedOrders,
+      completedOrders,
+      cancelledOrders,
+      pendingReviews,
+      revenueData,
+      recentOrders,
+    ] = await Promise.all([
       prisma.user.count(),
       prisma.vendor.count(),
-      prisma.user.count({
-        where: { role: 'CUSTOMER' },
+      prisma.user.count({ where: { role: 'CUSTOMER' } }),
+      prisma.vendor.count({ where: { isActive: true } }),
+      prisma.vendor.count({ where: { isActive: false } }),
+      prisma.product.count(),
+      prisma.product.count({ where: { isActive: true } }),
+      prisma.product.count({ where: { stock: { lte: 5 }, isActive: true } }),
+      prisma.order.count(),
+      prisma.order.count({ where: { status: 'PREPARING' } }),
+      prisma.order.count({ where: { status: 'READY_FOR_PICKUP' } }),
+      prisma.order.count({ where: { status: 'OUT_FOR_DELIVERY' } }),
+      prisma.order.count({ where: { status: 'COMPLETED' } }),
+      prisma.order.count({ where: { status: 'CANCELLED' } }),
+      prisma.review.count({ where: { status: 'PENDING' } }),
+      prisma.order.aggregate({
+        _sum: { totalAmount: true },
+        _count: true,
       }),
-      prisma.user.findMany({
+      prisma.order.findMany({
         select: {
           id: true,
-          name: true,
-          email: true,
-          role: true,
+          orderNumber: true,
+          totalAmount: true,
+          status: true,
           createdAt: true,
+          user: {
+            select: {
+              name: true,
+              email: true,
+            },
+          },
+          vendor: {
+            select: {
+              name: true,
+            },
+          },
+          _count: {
+            select: {
+              items: true,
+            },
+          },
         },
         orderBy: { createdAt: 'desc' },
-        take: 10,
+        take: 8,
       }),
     ]);
 
-    const adminCount = await prisma.user.count({
-      where: { role: 'ADMIN' },
-    });
+    const totalRevenue = revenueData._sum.totalAmount
+      ? Number(revenueData._sum.totalAmount)
+      : 0;
 
-    const vendorCount = await prisma.user.count({
-      where: { role: 'VENDOR' },
-    });
+    const statsPayload = {
+      totalRevenue,
+      totalOrders,
+      totalCustomers,
+      totalProducts,
+      activeVendors,
+      totalVendors,
+      totalUsers,
+      pendingOrders,
+      processingOrders,
+      shippedOrders,
+      completedOrders,
+      cancelledOrders,
+      pendingVendors,
+      lowStockProducts,
+      pendingReviews,
+      activeProducts,
+      averageOrderValue: totalOrders > 0 ? Math.round((totalRevenue / totalOrders) * 100) / 100 : 0,
+    };
+
+    const formattedRecentOrders = recentOrders.map((o) => ({
+      ...o,
+      totalAmount: Number(o.totalAmount),
+    }));
 
     return NextResponse.json(
       {
         success: true,
-        stats: {
-          totalUsers,
-          totalVendors,
-          totalCustomers,
-          adminCount,
-          vendorCount,
-          customerCount: totalCustomers,
-          usersByRole: {
-            customer: totalCustomers,
-            vendor: vendorCount,
-            admin: adminCount,
-          },
-        },
-        recentUsers,
+        data: statsPayload,
+        stats: statsPayload,
+        recentOrders: formattedRecentOrders,
       },
       { status: 200 }
     );
   } catch (error) {
     console.error('Admin stats error:', error);
     return NextResponse.json(
-      { error: 'Failed to fetch admin stats' },
+      { success: false, error: 'Failed to fetch admin stats from database' },
       { status: 500 }
     );
   }
-}
+});

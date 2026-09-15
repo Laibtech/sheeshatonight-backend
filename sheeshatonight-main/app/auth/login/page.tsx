@@ -1,20 +1,21 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { Mail, Lock, Loader2 } from 'lucide-react';
+import { Mail, Lock, Loader2, Eye, EyeOff, ShieldCheck, ArrowRight, Sparkles } from 'lucide-react';
 import { useAuthStore } from '@/lib/store';
 import { setSessionCookie } from '@/lib/session';
+import Header from '@/components/Header';
+import Footer from '@/components/Footer';
 
-const NEXT_PUBLIC_API_URL = process.env.NEXT_PUBLIC_API_URL;
-const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL || NEXT_PUBLIC_API_URL?.replace(/\/api\/?$/, '') || 'http://localhost:5000';
-
-export default function LoginPage() {
+function LoginContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const { setLoggedIn, setUserRole, setUserData } = useAuthStore();
+  
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [requestedRole, setRequestedRole] = useState<string | null>(null);
@@ -30,193 +31,246 @@ export default function LoginPage() {
     setLoading(true);
 
     try {
-      // Debug: Log the URL being used
-      console.log('Attempting login to:', `${BACKEND_URL}/api/auth/login`);
-      console.log('BACKEND_URL:', BACKEND_URL);
-      console.log('NEXT_PUBLIC_API_URL:', NEXT_PUBLIC_API_URL);
-      
-      // Call backend login API
-      const response = await fetch(`${BACKEND_URL}/api/auth/login`, {
+      const response = await fetch('/api/auth/login', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
+        credentials: 'include',
         body: JSON.stringify({ email, password }),
       });
 
       const data = await response.json();
 
       if (!response.ok) {
-        setError(data.message || 'Invalid email or password');
+        if (response.status === 401) {
+          setError('Invalid email or password. Please try again.');
+        } else {
+          setError(data.error || 'Unable to log in. Please check your details and try again.');
+        }
         setLoading(false);
         return;
       }
 
-      // Store JWT tokens
-      localStorage.setItem('auth_token', data.token);
-      localStorage.setItem('refresh_token', data.refreshToken);
+      const { user, token } = data;
 
-      // Extract user info
-      const { user } = data;
+      if (token) {
+        localStorage.setItem('auth_token', token);
+        if (typeof document !== 'undefined') {
+          document.cookie = `auth_token=${encodeURIComponent(token)}; path=/; max-age=604800;`;
+          document.cookie = `user_role=${encodeURIComponent(user.role)}; path=/; max-age=604800;`;
+        }
+      }
 
-      // Update Zustand store
       setUserData({
         email: user.email,
-        name: user.firstName ? `${user.firstName} ${user.lastName || ''}`.trim() : user.email,
+        name: user.name,
       });
       setUserRole(user.role);
       setLoggedIn(true);
 
-      // Set session cookies for SSR
       setSessionCookie({
         role: user.role,
         email: user.email,
-        name: user.firstName ? `${user.firstName} ${user.lastName || ''}`.trim() : user.email,
-        region: user.region || 'Dubai, UAE',
+        name: user.name,
+        region: 'Dubai, UAE',
       });
 
-      // Redirect based on role
       const roleRoutes: Record<string, string> = {
-        CUSTOMER: '/dashboard',
+        CUSTOMER: '/',
         VENDOR: '/vendor',
-        ADMIN: '/admin/dashboard',
+        ADMIN: '/admin',
       };
 
-      const redirectPath = roleRoutes[user.role] || '/dashboard';
+      const redirectParam = searchParams?.get('redirect');
+      const redirectPath = redirectParam || roleRoutes[user.role] || '/';
       router.push(redirectPath);
     } catch (err) {
       console.error('Login error:', err);
-      setError('Network error. Please check if backend server is running.');
+      setError('Unable to connect. Please check your backend server / internet connection.');
     } finally {
       setLoading(false);
     }
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-[#F8FAFC] p-4">
-      {/* Background Effects */}
-      <div className="absolute inset-0 overflow-hidden pointer-events-none">
-        <div className="absolute w-96 h-96 bg-amber-200/20 rounded-full blur-3xl top-20 left-20 animate-pulse" />
-        <div className="absolute w-96 h-96 bg-amber-300/15 rounded-full blur-3xl bottom-20 right-20 animate-pulse delay-1000" />
-      </div>
+    <div className="min-h-screen bg-slate-50 flex flex-col justify-between">
+      {/* Simple Header with Logo and Back to Web */}
+      <header className="bg-white border-b border-slate-200 py-4 px-6">
+        <div className="max-w-md mx-auto flex items-center justify-between">
+          <a href="/" className="flex items-center">
+            <img src="/logo.png" alt="SheeshaTonight" className="h-10 w-auto" />
+          </a>
+          <a
+            href="/"
+            className="flex items-center gap-2 px-4 py-2 text-sm font-semibold text-slate-700 hover:text-[#8a277d] transition-colors"
+          >
+            <ArrowRight className="w-4 h-4 rotate-180" />
+            <span>Back to Web</span>
+          </a>
+        </div>
+      </header>
 
-      {/* Login Card */}
-      <div className="relative w-full max-w-md">
-        <div className="bg-white border border-slate-200 rounded-2xl shadow-xl p-8">
-          {/* Logo */}
-          <div className="flex justify-center mb-8">
-            <img 
-              src="/logo.png" 
-              alt="SheeshaTonight" 
-              className="h-16 w-auto object-contain"
-            />
+      {/* Main Container */}
+      <main className="flex-1 py-12 px-4 sm:px-6 lg:px-8 flex items-center justify-center bg-gradient-to-b from-purple-950/5 via-slate-50 to-slate-100 relative overflow-hidden">
+        {/* Subtle Brand Background Accents */}
+        <div className="absolute inset-0 pointer-events-none overflow-hidden">
+          <div className="absolute top-1/4 left-1/2 -translate-x-1/2 w-[600px] h-[300px] bg-purple-900/10 rounded-full blur-3xl opacity-60" />
+          <div className="absolute bottom-10 right-10 w-80 h-80 bg-amber-500/10 rounded-full blur-3xl opacity-40" />
+        </div>
+
+        <div className="w-full max-w-md relative z-10">
+          {/* Header Badge & Title */}
+          <div className="text-center mb-8">
+            <span className="inline-block text-[#8a277d] text-xs font-extrabold uppercase tracking-[2px] mb-2">
+              WELCOME BACK
+            </span>
+            
+            {/* SheeshaTonight Signature Gold Ornament */}
+            <div className="gold-line flex items-center justify-center gap-1.5 my-2">
+              <i className="w-6 h-[1px] bg-[#f5b83d]" />
+              <b className="w-1.5 h-1.5 bg-[#f5b83d] rounded-full" />
+              <i className="w-6 h-[1px] bg-[#f5b83d]" />
+            </div>
+
+            <h1 className="text-3xl sm:text-4xl font-bold text-slate-900 tracking-tight font-serif">
+              Sign In To <span className="text-[#8a277d]">SheeshaTonight</span>
+            </h1>
+            <p className="mt-2 text-sm text-slate-600">
+              Access your premium sheesha rentals, bookings, & marketplace orders
+            </p>
           </div>
 
-          {/* Title */}
-          <h1 className="text-3xl font-bold text-slate-900 text-center mb-2">
-            Welcome Back
-          </h1>
-          <p className="text-slate-600 text-center mb-4">
-            Sign in to access your premium sheesha experience
-          </p>
-
-          {/* Demo Credentials */}
-          <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 mb-6">
-            <p className="text-xs font-semibold text-amber-900 mb-1.5">🎯 Demo Login:</p>
-            <div className="space-y-0.5 text-[11px] text-amber-800 font-mono">
-              <p>customer@sheeshatonight.com / customer123</p>
-              <p>vendor@sheeshatonight.com / vendor123</p>
-              <p>admin@sheeshatonight.com / admin123</p>
-            </div>
-          </div>
-
-          {requestedRole && (
-            <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 mb-4">
-              <p className="text-xs text-blue-800">
-                Logging in as: <span className="font-semibold capitalize">{requestedRole}</span>
-              </p>
-            </div>
-          )}
-
-          {/* Form */}
-          <form onSubmit={handleLogin} className="space-y-4">
-            <div>
-              <label className="block text-sm font-medium text-slate-700 mb-2">
-                Email Address
-              </label>
-              <div className="relative">
-                <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400" />
-                <input
-                  type="email"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  placeholder="you@example.com"
-                  className="w-full pl-11 pr-4 py-3 bg-slate-50 border border-slate-200 rounded-lg text-slate-900 placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-[#D4AF37] focus:border-transparent transition-all"
-                  required
-                />
-              </div>
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-slate-700 mb-2">
-                Password
-              </label>
-              <div className="relative">
-                <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400" />
-                <input
-                  type="password"
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  placeholder="Enter your password"
-                  className="w-full pl-11 pr-4 py-3 bg-slate-50 border border-slate-200 rounded-lg text-slate-900 placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-[#D4AF37] focus:border-transparent transition-all"
-                  required
-                />
-              </div>
-            </div>
-
-            {error && (
-              <div className="p-3 bg-red-500/10 border border-red-500/50 rounded-lg">
-                <p className="text-red-600 text-sm">{error}</p>
+          {/* Card Container */}
+          <div className="bg-white border border-[#e9e4eb] rounded-2xl shadow-xl p-6 sm:p-8 backdrop-blur-sm">
+            {/* Requested Role Badge */}
+            {requestedRole && (
+              <div className="mb-6 p-3 bg-purple-50 border border-purple-200 rounded-xl flex items-center gap-2">
+                <ShieldCheck className="w-5 h-5 text-[#8a277d] flex-shrink-0" />
+                <p className="text-xs text-purple-950">
+                  Logging in for access to <span className="font-bold uppercase text-[#8a277d]">{requestedRole}</span> portal
+                </p>
               </div>
             )}
 
-            <button
-              type="submit"
-              disabled={loading || !email || !password}
-              className="w-full py-3.5 bg-[#D4AF37] hover:bg-[#B8902A] text-white font-semibold rounded-lg shadow-lg hover:shadow-xl transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
-            >
-              {loading ? (
-                <>
-                  <Loader2 className="w-5 h-5 animate-spin" />
-                  Signing in...
-                </>
-              ) : (
-                'Sign In'
-              )}
-            </button>
-          </form>
+            <form onSubmit={handleLogin} className="space-y-5">
+              {/* Email Address */}
+              <div>
+                <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-2">
+                  Email Address <span className="text-[#8a277d]">*</span>
+                </label>
+                <div className="relative">
+                  <Mail className="absolute left-3.5 top-1/2 -translate-y-1/2 w-5 h-5 text-[#8a277d]" />
+                  <input
+                    type="email"
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                    placeholder="Enter your email address"
+                    className="w-full pl-11 pr-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-slate-900 placeholder-slate-400 text-sm focus:outline-none focus:border-[#8a277d] focus:ring-4 focus:ring-[#8a277d]/10 transition-all font-medium"
+                    required
+                  />
+                </div>
+              </div>
 
-          {/* Footer */}
-          <div className="mt-6 text-center">
-            <p className="text-slate-500 text-sm">
-              Don't have an account?{' '}
-              <button 
-                onClick={() => router.push('/auth/signup')}
-                className="text-[#D4AF37] hover:text-[#B8902A] font-semibold"
+              {/* Password */}
+              <div>
+                <div className="flex items-center justify-between mb-2">
+                  <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider">
+                    Password <span className="text-[#8a277d]">*</span>
+                  </label>
+                  <a
+                    href="/forgot-password"
+                    className="text-xs font-semibold text-[#8a277d] hover:text-[#641c5f] transition-colors"
+                  >
+                    Forgot Password?
+                  </a>
+                </div>
+                <div className="relative">
+                  <Lock className="absolute left-3.5 top-1/2 -translate-y-1/2 w-5 h-5 text-[#8a277d]" />
+                  <input
+                    type={showPassword ? 'text' : 'password'}
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    placeholder="Enter your password"
+                    className="w-full pl-11 pr-12 py-3 bg-slate-50 border border-slate-200 rounded-xl text-slate-900 placeholder-slate-400 text-sm focus:outline-none focus:border-[#8a277d] focus:ring-4 focus:ring-[#8a277d]/10 transition-all font-medium"
+                    required
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowPassword(!showPassword)}
+                    className="absolute right-3.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-[#8a277d] transition-colors p-1"
+                    aria-label={showPassword ? 'Hide password' : 'Show password'}
+                  >
+                    {showPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
+                  </button>
+                </div>
+              </div>
+
+              {/* Error Box */}
+              {error && (
+                <div className="p-3.5 bg-red-50 border border-red-200 rounded-xl">
+                  <p className="text-red-700 text-xs font-medium leading-relaxed">{error}</p>
+                </div>
+              )}
+
+              {/* Submit Button */}
+              <button
+                type="submit"
+                disabled={loading || !email || !password}
+                className="w-full py-3.5 px-6 bg-[#8a277d] hover:bg-[#641c5f] active:bg-[#52154e] text-white font-bold rounded-xl shadow-lg shadow-purple-900/20 hover:shadow-purple-900/30 transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 text-sm tracking-wide"
               >
-                Sign Up
+                {loading ? (
+                  <>
+                    <Loader2 className="w-5 h-5 animate-spin" />
+                    <span>Signing In...</span>
+                  </>
+                ) : (
+                  <>
+                    <span>Sign In</span>
+                    <ArrowRight className="w-4 h-4" />
+                  </>
+                )}
               </button>
-            </p>
-            <p className="text-slate-400 text-xs mt-4">
-              By continuing, you agree to our Terms & Privacy Policy
-            </p>
+            </form>
+
+            {/* Footer Divider & Signup Prompt */}
+            <div className="mt-8 pt-6 border-t border-slate-100 text-center">
+              <p className="text-slate-600 text-sm">
+                Don't have an account?{' '}
+                <button
+                  onClick={() => router.push(requestedRole ? `/auth/signup?role=${requestedRole}` : '/auth/signup')}
+                  className="text-[#8a277d] hover:text-[#641c5f] font-bold underline underline-offset-4 ml-1 transition-colors"
+                >
+                  Create Account
+                </button>
+              </p>
+            </div>
           </div>
         </div>
+      </main>
 
-        {/* Decorative Elements */}
-        <div className="absolute -top-4 -left-4 w-24 h-24 bg-[#D4AF37]/10 rounded-full blur-xl" />
-        <div className="absolute -bottom-4 -right-4 w-32 h-32 bg-[#D4AF37]/10 rounded-full blur-xl" />
-      </div>
+      {/* Simple Footer */}
+      <footer className="bg-white border-t border-slate-200 py-4">
+        <div className="max-w-md mx-auto text-center">
+          <p className="text-xs text-slate-500">
+            © 2026 SheeshaTonight. All rights reserved.
+          </p>
+        </div>
+      </footer>
     </div>
+  );
+}
+
+export default function LoginPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="min-h-screen flex items-center justify-center bg-slate-50">
+          <Loader2 className="w-10 h-10 text-[#8a277d] animate-spin" />
+        </div>
+      }
+    >
+      <LoginContent />
+    </Suspense>
   );
 }

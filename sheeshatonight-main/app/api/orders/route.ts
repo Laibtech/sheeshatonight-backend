@@ -1,189 +1,221 @@
-import { NextResponse } from 'next/server';
-import { Decimal } from '@prisma/client/runtime/library';
-import { withAuth, successResponse, errorResponse, AuthenticatedRequest } from '@/lib/middleware';
+import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
-import { getPaginationParams, buildPaginationResponse } from '@/lib/utils';
-import { createOrderSchema } from '@/lib/validation';
-import { generateOrderNumber } from '@/lib/utils';
+import { withAuth, AuthenticatedRequest } from '@/lib/middleware';
 
-/**
- * GET /api/orders
- * List orders (role-based access)
- */
+// GET - Fetch user's orders
 export const GET = withAuth(async (req: AuthenticatedRequest) => {
   try {
     const userId = req.user?.userId;
-    const { searchParams } = new URL(req.url);
-    const { page, pageSize, skip, take } = getPaginationParams(searchParams);
-    const status = searchParams.get('status');
-
-    let where: any = {};
-
-    // Filter by role
-    if (req.user?.role === 'CUSTOMER') {
-      where.userId = userId;
-    } else if (req.user?.role === 'VENDOR') {
-      where.vendorId = req.user?.vendorId;
-    }
-    // ADMIN sees all orders
-
-    // Filter by status
-    if (status && ['PREPARING', 'READY_FOR_PICKUP', 'OUT_FOR_DELIVERY', 'DELIVERED', 'ACTIVE_RENTAL', 'COMPLETED', 'CANCELLED'].includes(status)) {
-      where.status = status;
-    }
-
-    const [orders, total] = await Promise.all([
-      prisma.order.findMany({
-        where,
-        include: {
-          items: {
-            select: {
-              id: true,
-              quantity: true,
-              price: true,
-              product: {
-                select: {
-                  id: true,
-                  title: true,
-                  type: true,
-                },
-              },
-            },
-          },
-          vendor: {
-            select: {
-              id: true,
-              name: true,
-            },
-          },
-        },
-        skip,
-        take,
-        orderBy: { createdAt: 'desc' },
-      }),
-      prisma.order.count({ where }),
-    ]);
-
-    return NextResponse.json(
-      buildPaginationResponse(orders, total, page, pageSize),
-      { status: 200 }
-    );
-  } catch (error) {
-    console.error('Get orders error:', error);
-    return errorResponse('Failed to fetch orders', 500);
-  }
-});
-
-/**
- * POST /api/orders
- * Create new order (customer)
- */
-export const POST = withAuth(async (req: AuthenticatedRequest) => {
-  try {
-    const userId = req.user?.userId;
-
+    
     if (!userId) {
-      return errorResponse('User not authenticated', 401);
-    }
-
-    if (req.user?.role !== 'CUSTOMER') {
-      return errorResponse('Only customers can create orders', 403);
-    }
-
-    const body = await req.json();
-    const validation = createOrderSchema.safeParse(body);
-
-    if (!validation.success) {
-      return errorResponse('Validation failed', 400, 'VALIDATION_ERROR',
-        Object.fromEntries(
-          validation.error.errors.map(e => [e.path.join('.'), e.message])
-        )
+      return NextResponse.json(
+        { success: false, error: 'Unauthorized' },
+        { status: 401 }
       );
     }
 
-    const { vendorId, items, rentalStartDate, rentalEndDate, notes } = validation.data;
-
-    // Verify vendor exists
-    const vendor = await prisma.vendor.findUnique({
-      where: { id: vendorId },
-      select: { id: true, isActive: true },
+    const user = await prisma.user.findUnique({
+      where: { id: userId },
     });
 
-    if (!vendor || !vendor.isActive) {
-      return errorResponse('Vendor not found or inactive', 404);
+    if (!user) {
+      return NextResponse.json(
+        { success: false, error: 'User not found' },
+        { status: 404 }
+      );
     }
 
-    // Fetch and validate products
-    const productIds = items.map(item => item.productId);
-    const products = await prisma.product.findMany({
-      where: {
-        id: { in: productIds },
-        vendorId,
-        isActive: true,
-        deletedAt: null,
-      },
-      select: {
-        id: true,
-        price: true,
-        stock: true,
-      },
-    });
-
-    const productMap = new Map(products.map(p => [p.id, p]));
-
-    // Validate all products exist and have stock
-    let totalAmount = 0;
-    for (const item of items) {
-      const product = productMap.get(item.productId);
-      if (!product) {
-        return errorResponse(`Product ${item.productId} not found`, 400);
-      }
-      if (product.stock < item.quantity) {
-        return errorResponse(`Product ${item.productId} has insufficient stock`, 400);
-      }
-      totalAmount += Number(product.price) * item.quantity;
-    }
-
-    // Generate order number
-    const orderNumber = await generateOrderNumber();
-
-    // Create order with items
-    const order = await prisma.order.create({
-      data: {
-        orderNumber,
-        userId,
-        vendorId,
-        status: 'PREPARING',
-        totalAmount: new Decimal(totalAmount),
-        rentalStartDate: rentalStartDate ? new Date(rentalStartDate) : undefined,
-        rentalEndDate: rentalEndDate ? new Date(rentalEndDate) : undefined,
-        notes,
-        items: {
-          create: items.map(item => ({
-            productId: item.productId,
-            quantity: item.quantity,
-            price: productMap.get(item.productId)!.price,
-          })),
-        },
-      },
+    // Fetch orders
+    const orders = await prisma.order.findMany({
+      where: { userId: user.id },
       include: {
+        vendor: {
+          select: {
+            name: true,
+            phone: true,
+          },
+        },
         items: {
           include: {
             product: {
               select: {
-                id: true,
                 title: true,
-                type: true,
+                images: true,
               },
             },
           },
         },
+        invoice: {
+          select: {
+            id: true,
+            invoiceNumber: true,
+            issuedAt: true,
+            subtotal: true,
+            tax: true,
+            total: true,
+          },
+        },
+      },
+      orderBy: {
+        createdAt: 'desc',
       },
     });
 
-    return successResponse(order, 'Order created successfully', 201);
-  } catch (error) {
-    console.error('Create order error:', error);
-    return errorResponse('Failed to create order', 500);
+    const formattedOrders = orders.map((order) => ({
+      id: order.id,
+      orderNumber: order.orderNumber,
+      status: order.status,
+      totalAmount: Number(order.totalAmount),
+      currency: order.currency,
+      vendor: order.vendor.name,
+      items: order.items.map((item) => ({
+        id: item.id,
+        productName: item.product.title,
+        quantity: item.quantity,
+        price: Number(item.price),
+      })),
+      invoice: order.invoice
+        ? {
+            id: order.invoice.id,
+            invoiceNumber: order.invoice.invoiceNumber,
+            issuedAt: order.invoice.issuedAt.toISOString(),
+          }
+        : undefined,
+      createdAt: order.createdAt,
+    }));
+
+    return NextResponse.json({
+      success: true,
+      data: formattedOrders,
+    });
+  } catch (error: any) {
+    console.error('Error fetching orders:', error);
+    return NextResponse.json(
+      { success: false, error: error.message || 'Failed to fetch orders' },
+      { status: 500 }
+    );
+  }
+});
+
+// POST - Create a new order directly
+export const POST = withAuth(async (req: AuthenticatedRequest) => {
+  try {
+    const userId = req.user?.userId;
+    if (!userId) {
+      return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 });
+    }
+
+    const body = await req.json();
+    const { items, notes, rentalStartDate, rentalEndDate } = body;
+
+    if (!Array.isArray(items) || items.length === 0) {
+      return NextResponse.json({ success: false, error: 'Order items required' }, { status: 400 });
+    }
+
+    const productIds = items.map((i: any) => i.productId);
+    const products = await prisma.product.findMany({
+      where: { id: { in: productIds }, isActive: true, deletedAt: null },
+      include: { vendor: true },
+    });
+
+    if (products.length === 0) {
+      return NextResponse.json({ success: false, error: 'Products not found or unavailable' }, { status: 404 });
+    }
+
+    const vendorId = products[0]!.vendorId;
+    let totalAmount = 0;
+    const orderItemsData: Array<{ productId: string; quantity: number; price: number }> = [];
+
+    for (const item of items) {
+      const p = products.find((pr) => pr.id === item.productId);
+      if (!p) continue;
+      const qty = Math.max(1, parseInt(item.quantity, 10) || 1);
+      const price = Number(p.price);
+      totalAmount += price * qty;
+      orderItemsData.push({
+        productId: p.id,
+        quantity: qty,
+        price,
+      });
+    }
+
+    // Generate unique collision-safe order number
+    const count = await prisma.order.count();
+    let orderNumber = `ORD-${new Date().getFullYear()}-${String(count + 1).padStart(3, '0')}`;
+    let exists = await prisma.order.findUnique({ where: { orderNumber } });
+    let counter = count + 1;
+    while (exists) {
+      counter++;
+      orderNumber = `ORD-${new Date().getFullYear()}-${String(counter).padStart(3, '0')}`;
+      exists = await prisma.order.findUnique({ where: { orderNumber } });
+    }
+
+    const order = await prisma.$transaction(async (tx) => {
+      const createdOrder = await tx.order.create({
+        data: {
+          orderNumber,
+          userId,
+          vendorId,
+          totalAmount,
+          currency: 'AED',
+          status: 'PREPARING',
+          rentalStartDate: rentalStartDate ? new Date(rentalStartDate) : null,
+          rentalEndDate: rentalEndDate ? new Date(rentalEndDate) : null,
+          notes: notes || null,
+        },
+      });
+
+      for (const item of orderItemsData) {
+        await tx.orderItem.create({
+          data: {
+            orderId: createdOrder.id,
+            productId: item.productId,
+            quantity: item.quantity,
+            price: item.price,
+          },
+        });
+        await tx.product.update({
+          where: { id: item.productId },
+          data: { stock: { decrement: item.quantity } },
+        });
+      }
+
+      const tax = totalAmount * 0.05;
+      await tx.invoice.create({
+        data: {
+          orderId: createdOrder.id,
+          invoiceNumber: `INV-${orderNumber}`,
+          subtotal: totalAmount,
+          tax,
+          total: totalAmount + tax,
+          issuedAt: new Date(),
+        },
+      });
+
+      await tx.orderTracking.create({
+        data: {
+          orderId: createdOrder.id,
+          status: 'PREPARING',
+          events: [
+            {
+              status: 'PREPARING',
+              timestamp: new Date().toISOString(),
+              message: 'Order received and being prepared by vendor',
+            },
+          ],
+        },
+      });
+
+      return createdOrder;
+    });
+
+    return NextResponse.json({
+      success: true,
+      message: 'Order created successfully',
+      data: order,
+    }, { status: 201 });
+  } catch (error: any) {
+    console.error('Error creating order:', error);
+    return NextResponse.json({ success: false, error: error.message || 'Failed to create order' }, { status: 500 });
   }
 });

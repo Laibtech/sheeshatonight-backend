@@ -6,7 +6,7 @@ import { AdminDashboardLayout } from '@/components/AdminDashboardLayout';
 
 export default function AdminLayout({ children }: { children: React.ReactNode }) {
   return (
-    <ProtectedRoute allowedRoles={['ADMIN']}>
+    <ProtectedRoute allowedRoles={['ADMIN', 'SUPER_ADMIN']}>
       <AdminDashboardLayout>
         {children}
       </AdminDashboardLayout>

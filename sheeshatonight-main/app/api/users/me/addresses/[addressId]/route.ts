@@ -5,15 +5,23 @@ import { verifyToken } from '@/lib/jwt';
 import { prisma } from '@/lib/prisma';
 import { updateAddressSchema } from '@/lib/validation';
 
+function extractTokenFromReq(request: Request): string | null {
+  const authHeader = request.headers.get('authorization') || request.headers.get('Authorization');
+  if (authHeader?.startsWith('Bearer ')) {
+    return authHeader.substring(7);
+  }
+  const cookieHeader = request.headers.get('cookie');
+  const match = cookieHeader?.match(/(?:^|; )auth_token=([^;]*)/);
+  return match && match[1] ? decodeURIComponent(match[1]) : null;
+}
+
 /**
  * GET /api/users/me/addresses/[addressId]
  * Get specific address
  */
 export async function GET(request: Request, { params }: { params: { addressId: string } }) {
   try {
-    // Extract token from cookies
-    const cookieHeader = request.headers.get('cookie');
-    const token = cookieHeader?.split('; ').find(c => c.startsWith('auth_token='))?.split('=')[1];
+    const token = extractTokenFromReq(request);
 
     if (!token || !verifyToken(token)) {
       return errorResponse('Authentication required', 401);
@@ -54,9 +62,7 @@ export async function GET(request: Request, { params }: { params: { addressId: s
  */
 export async function PUT(request: Request, { params }: { params: { addressId: string } }) {
   try {
-    // Extract token from cookies
-    const cookieHeader = request.headers.get('cookie');
-    const token = cookieHeader?.split('; ').find(c => c.startsWith('auth_token='))?.split('=')[1];
+    const token = extractTokenFromReq(request);
 
     if (!token || !verifyToken(token)) {
       return errorResponse('Authentication required', 401);
@@ -130,9 +136,7 @@ export async function PUT(request: Request, { params }: { params: { addressId: s
  */
 export async function DELETE(request: Request, { params }: { params: { addressId: string } }) {
   try {
-    // Extract token from cookies
-    const cookieHeader = request.headers.get('cookie');
-    const token = cookieHeader?.split('; ').find(c => c.startsWith('auth_token='))?.split('=')[1];
+    const token = extractTokenFromReq(request);
 
     if (!token || !verifyToken(token)) {
       return errorResponse('Authentication required', 401);

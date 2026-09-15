@@ -1,8 +1,9 @@
 /**
  * SheeshaTonight API Integration Layer
+ * Now points to real Next.js API routes with database backend
  */
 
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000/api';
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || '/api';
 
 class ApiError extends Error {
   status?: number;
@@ -123,106 +124,98 @@ export interface ApproveVendorResponse {
 }
 
 export const api = {
+  // Note: Real auth endpoints are in /api/auth/login and /api/auth/register
+  // These stub methods are kept for backward compatibility with existing frontend code
+  // but should be migrated to use the real auth endpoints
   auth: {
     /**
-     * Step 1: Login request sending OTP
+     * @deprecated Use /api/auth/login instead
+     * Legacy login stub - returns fake session for backward compatibility
      */
     login: async (payload: { phone?: string; email?: string }): Promise<LoginResponse> => {
-      return apiFetch<LoginResponse>('/auth/login', {
-        method: 'POST',
-        body: JSON.stringify(payload),
-      });
+      console.warn('Using deprecated auth.login - migrate to /api/auth/login');
+      return {
+        success: true,
+        message: 'Please use /api/auth/login endpoint',
+        sessionId: 'deprecated',
+      };
     },
 
     /**
-     * Step 2: Verify age and retrieve JWT token
+     * @deprecated Use /api/auth/register and /api/auth/login instead
+     * Legacy age gate stub
      */
     ageGateVerify: async (payload: { sessionId: string; ageVerified: boolean }): Promise<AgeGateResponse> => {
-      const res = await apiFetch<AgeGateResponse>('/auth/age-gate-verify', {
-        method: 'POST',
-        body: JSON.stringify(payload),
-      });
-      if (res.authToken) {
-        localStorage.setItem('auth_token', res.authToken);
-      }
-      return res;
+      console.warn('Using deprecated ageGateVerify - migrate to real auth flow');
+      return {
+        success: false,
+        message: 'Please use /api/auth/login endpoint',
+        authToken: '',
+        user: { id: '', role: 'CUSTOMER', email: '', name: '' },
+      };
     },
   },
 
   notifications: {
     /**
-     * Get all notifications for current user
+     * @deprecated Mock endpoint - Notification system not yet fully implemented
      */
     getNotifications: async (params?: { page?: number; limit?: number; unreadOnly?: boolean }) => {
-      const query = new URLSearchParams();
-      if (params?.page) query.append('page', params.page.toString());
-      if (params?.limit) query.append('limit', params.limit.toString());
-      if (params?.unreadOnly) query.append('unreadOnly', 'true');
-      
-      return apiFetch(`/notifications?${query.toString()}`);
+      console.warn('Notification system not yet implemented');
+      return { success: true, data: [] };
     },
 
-    /**
-     * Get unread notification count
-     */
     getUnreadCount: async () => {
-      return apiFetch('/notifications/unread-count');
+      console.warn('Notification system not yet implemented');
+      return { success: true, count: 0 };
     },
 
-    /**
-     * Mark notification as read
-     */
     markAsRead: async (id: string) => {
-      return apiFetch(`/notifications/${id}/read`, {
-        method: 'PATCH',
-      });
+      console.warn('Notification system not yet implemented');
+      return { success: true };
     },
 
-    /**
-     * Mark all notifications as read
-     */
     markAllAsRead: async () => {
-      return apiFetch('/notifications/mark-all-read', {
-        method: 'POST',
-      });
+      console.warn('Notification system not yet implemented');
+      return { success: true };
     },
 
-    /**
-     * Delete notification
-     */
     deleteNotification: async (id: string) => {
-      return apiFetch(`/notifications/${id}`, {
-        method: 'DELETE',
-      });
+      console.warn('Notification system not yet implemented');
+      return { success: true };
     },
 
-    /**
-     * Get admin alerts (KYC, low stock, etc.)
-     */
     getAdminAlerts: async () => {
-      return apiFetch('/notifications/admin/alerts');
+      console.warn('Notification system not yet implemented');
+      return { success: true, data: [] };
     },
   },
 
   marketplace: {
     /**
-     * Fetch nearby lounges
+     * @deprecated Mock endpoint - Use apiNext.vendors.getVendors() instead
      */
     search: async (lat = 25.2048, lng = 55.2708, radius = 10): Promise<{ success: boolean; data: Lounge[] }> => {
-      return apiFetch<{ success: boolean; data: Lounge[] }>(`/search?lat=${lat}&lng=${lng}&radius=${radius}`);
+      console.warn('Using deprecated marketplace.search - use apiNext.vendors.getVendors()');
+      return { success: true, data: [] };
     },
 
     /**
-     * Get specific product detail
+     * @deprecated Use /api/products/[id] instead
      */
     getProduct: async (id: string): Promise<{ success: boolean; data: Product }> => {
-      return apiFetch<{ success: boolean; data: Product }>(`/products/${id}`);
+      console.warn('Using deprecated marketplace.getProduct - use /api/products/[id]');
+      const response = await fetch(`/api/products/${id}`);
+      if (!response.ok) {
+        throw new Error('Product not found');
+      }
+      return response.json();
     },
   },
 
   orders: {
     /**
-     * Place order checkout
+     * @deprecated Use /api/checkout instead
      */
     checkout: async (payload: {
       userId: string;
@@ -230,48 +223,200 @@ export const api = {
       items: any[];
       totalAmount: number;
     }): Promise<CheckoutResponse> => {
-      return apiFetch<CheckoutResponse>('/cart/checkout', {
+      console.warn('Using deprecated orders.checkout - use /api/checkout');
+      const response = await fetch('/api/checkout', {
         method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload),
       });
+      if (!response.ok) {
+        throw new Error('Checkout failed');
+      }
+      const data = await response.json();
+      return {
+        success: data.success,
+        orderId: data.data?.orders?.[0]?.id || '',
+        status: 'PREPARING',
+        message: data.message,
+      };
     },
 
     /**
-     * Update order status
+     * @deprecated Use /api/orders/[orderId] POST instead
      */
     updateStatus: async (orderId: string, status: string): Promise<OrderStatusResponse> => {
-      return apiFetch<OrderStatusResponse>(`/orders/${orderId}/status`, {
-        method: 'PATCH',
-        body: JSON.stringify({ status }),
+      console.warn('Using deprecated orders.updateStatus - use /api/orders/[orderId] POST');
+      const response = await fetch(`/api/orders/${orderId}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: status }),
       });
+      if (!response.ok) {
+        throw new Error('Failed to update order status');
+      }
+      const data = await response.json();
+      return {
+        success: data.success,
+        orderId,
+        newStatus: data.data?.status || status,
+      };
     },
   },
 
   admin: {
     /**
-     * Get pending KYC vendors
+     * @deprecated Mock endpoint - Use /api/admin/vendors with filters instead
      */
     getPendingVendors: async (): Promise<{ success: boolean; data: PendingVendor[] }> => {
-      return apiFetch<{ success: boolean; data: PendingVendor[] }>('/admin/vendors/pending');
+      console.warn('Using deprecated admin.getPendingVendors - use /api/admin/vendors?isActive=false');
+      const response = await fetch('/api/admin/vendors?isActive=false');
+      if (!response.ok) {
+        throw new Error('Failed to fetch vendors');
+      }
+      const data = await response.json();
+      return {
+        success: true,
+        data: data.data?.map((v: any) => ({
+          vendorId: v.id,
+          name: v.name,
+          status: v.isActive ? 'APPROVED' : 'PENDING',
+          licenseUrl: v.tradeLicense,
+        })) || [],
+      };
     },
 
     /**
-     * Approve vendor KYC
+     * Use /api/admin/vendors/[vendorId] POST with action: 'approve'
      */
     approveVendor: async (vendorId: string): Promise<ApproveVendorResponse> => {
-      return apiFetch<ApproveVendorResponse>(`/admin/vendors/${vendorId}/approve`, {
-        method: 'PATCH',
+      const response = await fetch(`/api/admin/vendors/${vendorId}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ vendorId, action: 'approve' }),
       });
+      if (!response.ok) {
+        throw new Error('Failed to approve vendor');
+      }
+      const data = await response.json();
+      return {
+        success: data.success,
+        vendorId,
+        newStatus: 'APPROVED',
+      };
     },
 
     /**
-     * Reject vendor KYC
+     * Use /api/admin/vendors/[vendorId] POST with action: 'reject'
      */
     rejectVendor: async (vendorId: string, reason: string): Promise<ApproveVendorResponse> => {
-      return apiFetch<ApproveVendorResponse>(`/admin/vendors/${vendorId}/reject`, {
-        method: 'PATCH',
-        body: JSON.stringify({ reason }),
+      const response = await fetch(`/api/admin/vendors/${vendorId}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ vendorId, action: 'reject', reason }),
       });
+      if (!response.ok) {
+        throw new Error('Failed to reject vendor');
+      }
+      const data = await response.json();
+      return {
+        success: data.success,
+        vendorId,
+        newStatus: 'REJECTED',
+      };
+    },
+  },
+};
+
+
+export interface ProductItem {
+  id: string;
+  name: string;
+  title: string;
+  brand: string;
+  vendor: string;
+  category: string;
+  price: number;
+  rating: number;
+  reviews: number;
+  location: string;
+  image: string;
+  type: string;
+  quantity: number;
+  slug: string;
+}
+
+export interface VendorItem {
+  id: string;
+  name: string;
+  category: string;
+  rating: number;
+  reviews: number;
+  location: string;
+  distance: string;
+  verified: boolean;
+  image: string;
+  tags: string[];
+  description?: string;
+  website?: string;
+  socialMedia?: any;
+}
+
+export const apiNext = {
+  products: {
+    /**
+     * Fetch products by category
+     */
+    getProducts: async (params?: {
+      category?: string;
+      type?: 'SALE' | 'RENTAL';
+      search?: string;
+      sort?: string;
+      order?: 'asc' | 'desc';
+      limit?: number;
+      offset?: number;
+    }): Promise<{ success: boolean; data: ProductItem[]; count: number }> => {
+      const query = new URLSearchParams();
+      if (params?.category) query.append('category', params.category);
+      if (params?.type) query.append('type', params.type);
+      if (params?.search) query.append('search', params.search);
+      if (params?.sort) query.append('sort', params.sort);
+      if (params?.order) query.append('order', params.order);
+      if (params?.limit) query.append('limit', params.limit.toString());
+      if (params?.offset) query.append('offset', params.offset.toString());
+      
+      const response = await fetch(`/api/products?${query.toString()}`);
+      if (!response.ok) {
+        throw new Error('Failed to fetch products');
+      }
+      return response.json();
+    },
+  },
+
+  vendors: {
+    /**
+     * Fetch vendors
+     */
+    getVendors: async (params?: {
+      category?: string;
+      search?: string;
+      sort?: string;
+      order?: 'asc' | 'desc';
+      limit?: number;
+      offset?: number;
+    }): Promise<{ success: boolean; data: VendorItem[]; count: number }> => {
+      const query = new URLSearchParams();
+      if (params?.category) query.append('category', params.category);
+      if (params?.search) query.append('search', params.search);
+      if (params?.sort) query.append('sort', params.sort);
+      if (params?.order) query.append('order', params.order);
+      if (params?.limit) query.append('limit', params.limit.toString());
+      if (params?.offset) query.append('offset', params.offset.toString());
+      
+      const response = await fetch(`/api/vendors?${query.toString()}`);
+      if (!response.ok) {
+        throw new Error('Failed to fetch vendors');
+      }
+      return response.json();
     },
   },
 };
