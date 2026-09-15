@@ -16,44 +16,38 @@ const categories = [
   {
     title: "Sheesha Flavors",
     description: "Premium flavors for every mood.",
-    image:
-      "https://images.unsplash.com/photo-1519671282424-7f3e8d1c7f9b?auto=format&fit=crop&w=800&q=85",
+    image: "/Categories/flavor.webp",
     href: "/categories/flavors",
   },
   {
     title: "Sheesha Setups",
     description: "Complete premium sheesha setups.",
-    image:
-      "https://images.unsplash.com/photo-1590879041055-7f3e8d1c7f9b?auto=format&fit=crop&w=800&q=85",
+    image: "/Categories/Sheesha%20Setups.webp",
     href: "/categories/sheesha-setups",
   },
   {
     title: "Accessories",
     description: "Everything you need for your setup.",
-    image:
-      "https://images.unsplash.com/photo-1523268755815-fe7c372a0349?auto=format&fit=crop&w=800&q=85",
+    image: "/Categories/Accessories.webp",
     href: "/categories/accessories",
   },
   {
     title: "Rent a Sheesha",
     description: "Premium setups delivered to you.",
-    image:
-      "https://images.unsplash.com/photo-1518002171953-a080ee817e1f?auto=format&fit=crop&w=800&q=85",
+    image: "/Categories/Rentals.webp",
     href: "/categories/rentals",
   },
   {
     title: "Buy Sheesha",
     description: "Discover premium sheesha collections.",
-    image:
-      "https://images.unsplash.com/photo-1544787219-7f47ccb76574?auto=format&fit=crop&w=800&q=85",
+    image: "/Categories/Buy%20Sheesha.webp",
     href: "/categories/buy-sheesha",
   },
   {
-    title: "Premium Packages",
-    description: "Curated experiences for special occasions.",
-    image:
-      "https://images.unsplash.com/photo-1514525253161-7a46d19cd819?auto=format&fit=crop&w=800&q=85",
-    href: "/experiences",
+    title: "Top Vendors",
+    description: "Verified lounges & premium packages.",
+    image: "/Categories/Top%20Vendors.webp",
+    href: "/categories/top-vendors",
   },
 ];
 
