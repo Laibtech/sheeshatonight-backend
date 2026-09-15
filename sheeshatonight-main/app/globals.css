@@ -1923,18 +1923,16 @@ VERTICAL MARQUEE
   position: fixed;
   top: 0;
   left: 0;
-  width: 48px;
+  width: 46px;
   height: 100%;
   overflow: hidden;
   display: flex;
   justify-content: center;
   align-items: center;
-  border-right: 1px solid rgba(118, 33, 111, 0.25);
+  border-right: 1.5px solid rgba(239, 182, 59, 0.5);
   z-index: 9997;
-  background: linear-gradient(135deg, rgba(118, 33, 111, 0.15), rgba(87, 18, 117, 0.12));
-  backdrop-filter: blur(15px);
-  -webkit-backdrop-filter: blur(15px);
-  box-shadow: inset 0 0 40px rgba(118, 33, 111, 0.08);
+  background: linear-gradient(180deg, #3A0A36 0%, #220520 50%, #120211 100%);
+  box-shadow: 4px 0 25px rgba(0, 0, 0, 0.4), 0 0 15px rgba(239, 182, 59, 0.15);
 }
 
 body:has(.dashboard-layout) .vertical-marquee,
@@ -1947,9 +1945,9 @@ body:has(.vendor-layout) .vertical-marquee {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 24px;
-  padding: 28px 0;
-  animation: verticalMarquee 15s linear infinite;
+  gap: 22px;
+  padding: 24px 0;
+  animation: verticalMarquee 28s linear infinite;
   will-change: transform;
 }
 
@@ -1957,34 +1955,35 @@ body:has(.vendor-layout) .vertical-marquee {
   writing-mode: vertical-rl;
   transform: rotate(180deg);
   white-space: nowrap;
-  font-family: "Poppins", sans-serif;
-  font-size: 7px;
-  font-weight: 700;
-  letter-spacing: 1.8px;
-  color: #8a277d;
+  font-family: "Poppins", "Inter", sans-serif;
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 3px;
+  color: #FFFFFF;
   opacity: 0.95;
-  text-shadow: 0 2px 8px rgba(118, 33, 111, 0.3),
-               0 0 20px rgba(138, 39, 125, 0.2);
-  transition: all 0.3s ease;
+  text-shadow: 0 2px 6px rgba(0, 0, 0, 0.6);
+  transition: all 0.25s ease;
   padding: 0 4px;
 }
 
-/* Small separator */
+/* Luxury Gold Star Separator */
 .vertical-marquee-track span::after {
-  content: "•";
+  content: "✦";
   display: block;
-  margin-top: 18px;
-  font-size: 8px;
-  color: #c49a5a;
+  margin-top: 14px;
+  margin-bottom: 4px;
+  font-size: 9px;
+  color: #EFB63B;
+  text-shadow: 0 0 8px rgba(239, 182, 59, 0.85);
 }
 
 /* Hover effect on individual items */
 .vertical-marquee-track span:hover {
   opacity: 1;
-  color: #9a239e;
-  text-shadow: 0 2px 12px rgba(138, 39, 125, 0.5),
-               0 0 30px rgba(154, 35, 158, 0.4);
-  transform: rotate(180deg) scale(1.05);
+  color: #EFB63B;
+  text-shadow: 0 0 14px rgba(239, 182, 59, 0.95), 0 2px 8px rgba(0, 0, 0, 0.5);
+  transform: rotate(180deg) scale(1.08);
+  cursor: default;
 }
 
 @keyframes verticalMarquee {
@@ -2004,21 +2003,21 @@ body:has(.vendor-layout) .vertical-marquee {
 /* Mobile */
 @media (max-width: 768px) {
   .vertical-marquee {
-    width: 45px;
+    width: 40px;
   }
   
   .vertical-marquee-track {
-    gap: 28px;
+    gap: 18px;
   }
   
   .vertical-marquee-track span {
-    font-size: 7px;
-    letter-spacing: 1.8px;
-    padding: 0 5px;
+    font-size: 9.5px;
+    letter-spacing: 2.2px;
+    padding: 0 3px;
   }
 }
 
-/* Hide on very small screens */
+/* Hide on very small screens to maintain layout readability */
 @media (max-width: 480px) {
   .vertical-marquee {
     display: none;

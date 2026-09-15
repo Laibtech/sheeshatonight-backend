@@ -26,27 +26,43 @@ export default function VerticalMarquee() {
   }
 
   return (
-    <div className="vertical-marquee">
+    <div className="vertical-marquee" title="SheeshaTonight Luxury Highlights">
       <div className="vertical-marquee-track">
-        <span>DISCOVER</span>
-        <span>PREMIUM</span>
-        <span>SHEESHA</span>
-        <span>EXPERIENCE</span>
-        <span>DUBAI</span>
-        <span>TONIGHT</span>
-        <span>FLAVORS</span>
-        <span>LOUNGES</span>
-        <span>DELIVERY</span>
-        {/* Duplicate for seamless loop */}
-        <span>DISCOVER</span>
-        <span>PREMIUM</span>
-        <span>SHEESHA</span>
-        <span>EXPERIENCE</span>
-        <span>DUBAI</span>
-        <span>TONIGHT</span>
-        <span>FLAVORS</span>
-        <span>LOUNGES</span>
-        <span>DELIVERY</span>
+        <span>PREMIUM SHEESHA</span>
+        <span>LUXURY RENTALS</span>
+        <span>VIP EXPERIENCE</span>
+        <span>DUBAI TONIGHT</span>
+        <span>EXPRESS DELIVERY</span>
+        <span>ARTISAN FLAVORS</span>
+        <span>EXCLUSIVE LOUNGES</span>
+        <span>VERIFIED MASTERS</span>
+
+        <span>PREMIUM SHEESHA</span>
+        <span>LUXURY RENTALS</span>
+        <span>VIP EXPERIENCE</span>
+        <span>DUBAI TONIGHT</span>
+        <span>EXPRESS DELIVERY</span>
+        <span>ARTISAN FLAVORS</span>
+        <span>EXCLUSIVE LOUNGES</span>
+        <span>VERIFIED MASTERS</span>
+
+        <span>PREMIUM SHEESHA</span>
+        <span>LUXURY RENTALS</span>
+        <span>VIP EXPERIENCE</span>
+        <span>DUBAI TONIGHT</span>
+        <span>EXPRESS DELIVERY</span>
+        <span>ARTISAN FLAVORS</span>
+        <span>EXCLUSIVE LOUNGES</span>
+        <span>VERIFIED MASTERS</span>
+
+        <span>PREMIUM SHEESHA</span>
+        <span>LUXURY RENTALS</span>
+        <span>VIP EXPERIENCE</span>
+        <span>DUBAI TONIGHT</span>
+        <span>EXPRESS DELIVERY</span>
+        <span>ARTISAN FLAVORS</span>
+        <span>EXCLUSIVE LOUNGES</span>
+        <span>VERIFIED MASTERS</span>
       </div>
     </div>
   );
